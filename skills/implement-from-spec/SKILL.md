@@ -1,105 +1,300 @@
 ---
 name: implement-from-spec
-description: Implement code strictly from an approved SPEC/PLAN/ACCEPTANCE without redesigning or re-questioning decisions.
+description: Implement code strictly from an approved SPEC/PLAN/TASKS/ACCEPTANCE. Execute atomic tasks in small chunks, keep the spec as source of truth, update TASKS execution status, and maintain a lightweight CHECKPOINT.md for safe resumption across sessions.
 metadata:
-  short-description: Execute implementation from finalized spec
+  short-description: Execute implementation from SPEC/PLAN/TASKS/ACCEPTANCE (atomic chunks + spec-anchored + CHECKPOINT)
 ---
 
 # Purpose
 
-Execute an implementation **only** after a design has been finalized.
+Implement code **only** after the design has been finalized via `spec-interview`.
 
-This skill assumes:
-- Design decisions are already made.
-- Trade-offs are already resolved.
+This skill is **execution-only** and **task-driven**:
 - The SPEC is the contract.
+- PLAN is the strategy.
+- TASKS is the executable backlog (atomic work units).
+- ACCEPTANCE is the verification target.
 
-This skill is **execution-only**.
+This skill also maintains a **lightweight CHECKPOINT** to safely resume work across sessions without reloading full history.
+
+---
+
+# Inputs (required)
+
+- `<slug>` identifying the spec (required)
+- Repository state (existing codebase)
+
+You may also receive a requested scope:
+- “Do the next task”
+- “Do tasks T1.1 and T1.2”
+- “Do Phase 0”
+
+If not provided, default to the **Current task** from `TASKS.md` → `Execution status`.
+
+---
+
+# Required files (must exist)
+
+The spec directory MUST exist:
+- `docs/specs/<slug>/`
+
+And MUST contain:
+- `SPEC.md`
+- `PLAN.md`
+- `TASKS.md`
+- `ACCEPTANCE.md`
+
+Additionally, this skill MUST create/maintain:
+- `CHECKPOINT.md`
+
+If ANY required file among SPEC/PLAN/TASKS/ACCEPTANCE is missing:
+- Stop immediately.
+- Explain what is missing.
+- Recommend returning to `spec-interview`.
+- Do NOT implement anything.
+
+---
 
 # Preconditions (MUST enforce)
 
 Before writing any code, you MUST verify:
 
-1) A spec directory exists at:
-   - `docs/specs/<slug>/`
+1) `SPEC.md` contains an "Open Questions" section AND it is empty  
+   - If not empty: STOP and send the user back to `spec-interview`.
 
-2) The following files exist:
-   - `SPEC.md`
-   - `PLAN.md`
-   - `ACCEPTANCE.md`
+2) `SPEC.md` contains the spec-anchored statement (verbatim):
 
-3) `SPEC.md` contains an "Open Questions" section AND it is empty.
+> The SPEC is the source of truth. If implementation deviates, update the SPEC + TASKS + ACCEPTANCE and record it in the Changelog.
 
-If ANY precondition fails:
-- Stop immediately.
-- Explain what is missing.
-- Do NOT implement anything.
+3) `TASKS.md` contains `## Execution status` as the LAST section  
+   - If missing/malformed: STOP and recommend fixing via `spec-interview`.
 
-# Inputs
+4) `TASKS.md` has minimally:
+   - Status
+   - Current task
+   - Last updated
 
-- `<slug>` identifying the spec (required).
-- The contents of:
-  - `docs/specs/<slug>/SPEC.md`
-  - `docs/specs/<slug>/PLAN.md`
-  - `docs/specs/<slug>/ACCEPTANCE.md`
+If `Status: DONE`:
+- STOP (nothing to implement).
+
+---
+
+# Hard execution guardrails (context + safety)
+
+- You MUST implement **at most 1–2 tasks per run** (one “chunk”).
+- You MUST NOT implement multiple phases in a single run.
+- You MUST keep diffs small and reviewable.
+- You MUST NOT add “bonus features” or refactor unrelated code.
+- If a task implies large changes: STOP and recommend splitting tasks (return to `spec-interview` to adjust TASKS).
+
+---
 
 # Strict execution rules
 
 - Do NOT redesign.
 - Do NOT propose alternatives.
 - Do NOT re-open decisions already documented.
-- Do NOT add features not explicitly listed.
+- Do NOT add features not explicitly listed in SPEC/TASKS.
 - Do NOT “improve” the design.
 - Do NOT refactor unrelated code.
 
 If something is unclear:
-- Check the SPEC first.
-- If still unclear, stop and report the ambiguity.
+- Check SPEC first.
+- Then check the task definition in TASKS.
+- Then check PLAN.
+- If still unclear: STOP and report the ambiguity.
 - Do NOT guess.
+
+---
 
 # Execution workflow
 
-## Step 1 — Load and summarize the contract
-- Read SPEC.md, PLAN.md, ACCEPTANCE.md.
-- Produce a brief summary (5–7 bullets) of:
-  - What must be built
-  - What must NOT be built
-  - Key constraints
+## Step 1 — Load and summarize the contract (brief)
 
-Confirm understanding before proceeding.
+Read:
+- `SPEC.md`
+- `PLAN.md`
+- `TASKS.md`
+- `ACCEPTANCE.md`
 
-## Step 2 — Implementation
-- Follow PLAN.md step by step.
-- Apply minimal, reviewable diffs.
-- Touch only files implied by PLAN.md.
-- Preserve existing style and conventions.
+Then produce a concise summary (5–8 bullets):
+- What must be built
+- What must NOT be built
+- Key constraints
+- Current execution status (from TASKS)
+- Which task(s) you will implement in this run
 
-## Step 3 — Verification
-- Validate against ACCEPTANCE.md.
-- If tests exist:
-  - Run them and report results.
-- If tests do not exist:
-  - State that clearly.
-  - Do NOT add new tooling unless PLAN.md explicitly says so.
+Task selection priority:
+1) User-requested tasks (if explicit and valid)
+2) Otherwise `Current task` from Execution status
 
-## Step 4 — Report
+---
+
+## Step 2 — Validate task scope (mandatory)
+
+For each chosen task (max 2), verify it is well-defined:
+- Goal
+- Inputs
+- Outputs
+- Steps
+- Done condition
+- Dependencies
+- Risks
+- Test/Verification
+
+If any field is missing or ambiguous:
+- STOP
+- Explain what is missing
+- Recommend returning to `spec-interview` to fix TASKS.md
+- Do NOT implement
+
+---
+
+## Step 3 — Implement (task-driven)
+
+Implement ONLY what is required to satisfy:
+- the chosen TASK(s)
+- the SPEC constraints
+
+Rules:
+- Touch only files implied by the task(s).
+- Preserve existing conventions and style.
+- Prefer minimal, reviewable diffs.
+- If you need a new file/module, it must be justified by task outputs.
+
+### If you discover a necessary deviation (spec-anchored rule)
+
+If implementation forces a change to requirements (API shape, flow behavior, constraints, edge-case semantics):
+- STOP immediately (no partial hacks)
+- Propose a SPEC update with:
+  - exact change
+  - why it’s necessary
+  - impact on TASKS + ACCEPTANCE
+- Update ONLY docs first (SPEC/TASKS/ACCEPTANCE + SPEC Changelog)
+- Continue implementation ONLY after docs are consistent
+
+You MUST record the change in SPEC Changelog as:
+- YYYY-MM-DD — <change summary>
+  - reason: <why it changed>
+  - impact: <what updated: tasks/plan/acceptance>
+
+---
+
+## Step 4 — Verification (minimal + targeted)
+
+Verify against ACCEPTANCE.md, but keep it scoped:
+- Run tests if they exist.
+- If no tests exist, perform verification steps from each implemented task.
+
+You MUST report:
+- What you verified
+- What you did NOT verify (and why)
+
+You MUST NOT add new tooling unless PLAN/TASKS explicitly say so.
+
+---
+
+## Step 5 — Update TASKS Execution status (mandatory)
+
+After successful implementation of the task(s), update `TASKS.md` → `## Execution status`:
+
+Rules:
+- Status transitions:
+  - NOT_STARTED → IN_PROGRESS (when first task begins)
+  - IN_PROGRESS stays until all tasks complete
+  - DONE only when all tasks are complete
+- Move Current task to the next pending task
+- Update Last updated = YYYY-MM-DD
+
+If all tasks are complete:
+- Set Status: DONE
+- Current task: (none)
+
+---
+
+## Step 6 — Maintain CHECKPOINT.md (mandatory)
+
+This skill MUST create/update:
+- `docs/specs/<slug>/CHECKPOINT.md`
+
+### Objective of CHECKPOINT.md
+Provide a short “resume safely” snapshot:
+- what was completed in practice
+- what is next
+- important constraints/gotchas discovered during implementation
+- safe resume instructions
+
+### Hard rules for CHECKPOINT.md
+- MUST be concise (aim: 10–25 lines)
+- MUST NOT duplicate TASKS definitions
+- MUST NOT introduce new requirements (those belong in SPEC.md)
+- MUST be updated after every run that changes code
+
+### Required CHECKPOINT.md structure (enforce)
+
+`CHECKPOINT.md` MUST contain:
+
+1) Title + slug  
+2) Last updated date  
+3) Completed (task IDs)  
+4) Current / Next (task IDs)  
+5) Important constraints (max 3 bullets)  
+6) Gotchas / Risks discovered (max 5 bullets)  
+7) Safe resume instructions (max 5 bullets)  
+
+Example structure (use exactly these headings):
+
+    # CHECKPOINT — <slug>
+
+    Last updated: YYYY-MM-DD
+
+    ## Completed
+    - T0.1 ...
+    - T1.1 ...
+
+    ## Current / Next
+    - Next task: T1.2 ...
+    - Status: READY
+
+    ## Important constraints
+    - ...
+
+    ## Gotchas / Risks discovered
+    - ...
+
+    ## Safe resume instructions
+    - ...
+
+---
+
+## Step 7 — Report (concise + factual)
+
 After implementation, report:
 
-- Files changed (with brief reason per file)
-- Acceptance criteria status:
-  - Passed / Failed / Not applicable
-- Any deviations from PLAN (must be justified)
+1) Tasks implemented in this run:
+   - T?.? title — done condition satisfied (yes/no)
 
-# Output expectations
+2) Files changed:
+   - path — reason
 
-- Implementation must match the SPEC and PLAN exactly.
-- Explanations should be concise and factual.
-- No redesign commentary.
-- No speculative improvements.
+3) Verification:
+   - Acceptance criteria impacted: Passed / Failed / Not checked
+   - Test results (if applicable)
+
+4) Execution status updates:
+   - New status + next task
+
+5) CHECKPOINT update summary:
+   - What changed in CHECKPOINT.md (1–3 bullets)
+
+6) Deviations (if any):
+   - Must link back to SPEC Changelog entry
+
+---
 
 # Failure mode
 
-If at any point the SPEC is insufficient to implement safely:
+If at any point SPEC/TASKS/ACCEPTANCE are insufficient to implement safely:
 - Stop.
 - Explain precisely what is missing.
 - Recommend returning to `spec-interview`.

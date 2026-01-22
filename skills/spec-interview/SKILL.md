@@ -1,303 +1,482 @@
 ---
-name: implement-from-spec
-description: Implement code strictly from an approved SPEC/PLAN/TASKS/ACCEPTANCE. Execute atomic tasks in small chunks, keep the spec as source of truth, update TASKS execution status, and maintain a lightweight CHECKPOINT.md for safe resumption across sessions.
+name: spec-interview
+description: Interview the user to complete a SPEC.md, then generate PLAN.md, TASKS.md and ACCEPTANCE.md. Use multiple-choice questions with built-in explain/compare/recommend helpers. Do not write code until the spec is complete.
 metadata:
-  short-description: Execute implementation from SPEC/PLAN/TASKS/ACCEPTANCE (atomic chunks + spec-anchored + CHECKPOINT)
+  short-description: Spec-driven interview → SPEC/PLAN/TASKS/ACCEPTANCE (atomic tasks + size guardrails + spec-anchored)
 ---
 
 # Purpose
 
-Implement code **only** after the design has been finalized via `spec-interview`.
+Turn an incomplete or vague idea into a complete, decision-backed design spec, then derive:
+1) a high-level PLAN
+2) an atomic TASK breakdown (small + reviewable chunks)
+3) acceptance criteria
 
-This skill is **execution-only** and **task-driven**:
-- The SPEC is the contract.
-- PLAN is the strategy.
-- TASKS is the executable backlog (atomic work units).
-- ACCEPTANCE is the verification target.
+This skill is **spec-driven**:
+- You MUST interview first.
+- You MUST avoid assumptions.
+- You MUST only generate docs (SPEC/PLAN/TASKS/ACCEPTANCE). Do not implement code.
 
-This skill also maintains a **lightweight CHECKPOINT** to safely resume work across sessions without reloading full history.
-
----
-
-# Inputs (required)
-
-- `<slug>` identifying the spec (required)
-- Repository state (existing codebase)
-
-You may also receive a requested scope:
-- “Do the next task”
-- “Do tasks T1.1 and T1.2”
-- “Do Phase 0”
-
-If not provided, default to the **Current task** from `TASKS.md` → `Execution status`.
+This skill is also **spec-anchored**:
+- The SPEC is a living contract.
+- If implementation later forces changes, the SPEC must be updated and the change logged.
 
 ---
 
-# Required files (must exist)
+# Inputs you may receive
 
-The spec directory MUST exist:
+- A feature idea described in chat
+- An existing draft at `docs/specs/<slug>/SPEC.md` (may be empty or partial)
+- A requested `<slug>` (optional)
+
+---
+
+# Outputs (must be created/updated)
+
+Create or update exactly these files:
+
+- `docs/specs/<slug>/SPEC.md`
+- `docs/specs/<slug>/PLAN.md`
+- `docs/specs/<slug>/TASKS.md`
+- `docs/specs/<slug>/ACCEPTANCE.md`
+
+Also create the directory if missing:
 - `docs/specs/<slug>/`
 
-And MUST contain:
-- `SPEC.md`
-- `PLAN.md`
-- `TASKS.md`
-- `ACCEPTANCE.md`
+---
 
-Additionally, this skill MUST create/maintain:
-- `CHECKPOINT.md`
+# Strict workflow
 
-If ANY required file among SPEC/PLAN/TASKS/ACCEPTANCE is missing:
-- Stop immediately.
-- Explain what is missing.
-- Recommend returning to `spec-interview`.
-- Do NOT implement anything.
+## Step 0 — Identify the spec slug
+
+If the user did not provide `<slug>`, ask for it.
+- Suggest a short kebab-case slug (e.g., `invoice-email-classifier`).
+
+Once `<slug>` is known, set:
+- SPEC path = `docs/specs/<slug>/SPEC.md`
+
+If a SPEC file exists, read it first and continue from what is already written.
+- Do NOT re-ask answered questions.
+- Do NOT overwrite existing decisions without explicit user change.
 
 ---
 
-# Preconditions (MUST enforce)
+## Step 0.A — Spec size guardrails (mandatory, early)
 
-Before writing any code, you MUST verify:
+You MUST actively prevent “RFC-size specs”.
 
-1) `SPEC.md` contains an "Open Questions" section AND it is empty  
-   - If not empty: STOP and send the user back to `spec-interview`.
+### Guardrails rule (hard)
+If the spec contains either:
+- **> 3 major flows** (large user/system workflows), OR
+- **> 10 acceptance criteria**
+then you MUST propose splitting into **2 specs**.
 
-2) `SPEC.md` contains the spec-anchored statement (verbatim):
+### What counts as a “major flow”
+A flow is “major” if it includes its own:
+- trigger/entrypoint
+- branching logic / states
+- failure modes
+- different actor/system boundaries
+
+Examples: “Ingest → Validate → Persist”, “Checkout → Payment → Confirmation”, “Upload → OCR → Review”.
+
+### Required behavior when guardrail triggers
+You MUST:
+1) explicitly warn about context/performance risk
+2) propose a split plan (two slugs)
+3) list what goes into Spec A vs Spec B
+4) ask the user to choose:
+   - A) split now
+   - B) keep single spec (but you must enforce concision and “phase boundaries”)
+
+
+## Step 0B — Split output rule (mandatory)
+
+If splitting into multiple specs is chosen, you MUST enforce a clean folder-per-spec layout:
+
+- Create **one folder per spec**:
+  - `docs/specs/<slug-a>/`
+  - `docs/specs/<slug-b>/`
+
+- Each spec folder MUST contain the **full set of files**:
+  - `SPEC.md`
+  - `PLAN.md`
+  - `TASKS.md`
+  - `ACCEPTANCE.md`
+
+- Do NOT create alternate spec filenames such as:
+  - `SPEC-part2.md`
+  - `SPEC_v2.md`
+  - `SPEC (copy).md`
+
+### Session safety rule (mandatory)
+
+Splitting into multiple specs can still overflow context if you attempt to fully write everything at once.
+
+Therefore:
+- Unless the user explicitly requests otherwise, you MUST generate **only one complete spec package** per session:
+  - `SPEC.md`
+  - `PLAN.md`
+  - `TASKS.md`
+  - `ACCEPTANCE.md`
+
+For the second spec (`<slug-b>`), you MUST create ONLY a lightweight draft `SPEC.md` containing:
+- Summary
+- Goals / Non-goals (high-level)
+- Scope boundary (what is excluded from Spec A)
+- Dependencies (explicitly reference Spec A)
+- Open Questions
+
+You MUST NOT generate `PLAN.md`, `TASKS.md`, or `ACCEPTANCE.md` for `<slug-b>` in the same session unless the user explicitly asks for it.
+
+---
+
+## Step 1 — Interview loop (NO coding)
+
+### Objective
+
+Ask high-signal, non-obvious questions until **Open Questions** becomes empty and all critical decisions are made (or explicitly deferred with documented consequences).
+
+### Interview structure rules
+
+- Ask **6–10 questions per round**.
+- Prefer **multiple-choice (A/B/C/D)** and ALWAYS include as mandatory:
+  - `E) Other: <free text>`
+  - `F) Not sure / decide later` (ONLY if truly acceptable to defer)
+
+### Decision-support options (built-in “Help Mode”)
+
+Every question MUST also include these meta-options:
+
+- `G) Explain options (A–D)`  
+  Provide plain-language explanation for each option + pros/cons.
+
+- `H) Compare options`  
+  Compare specific options the user names (e.g., A vs C, or A vs C vs D) using a fixed rubric.
+
+- `I) Recommend`  
+  Recommend the best option given the current constraints, and explicitly list what info is missing to be confident.
+
+- `J) Show examples`  
+  Give a small concrete example of how each option would look in practice (API calls, flow, pseudo-architecture), without writing implementation code.
+
+**Important gating rule:**  
+If the user answers `G/H/I/J` for any question:
+1) You MUST provide the requested explanation/comparison/recommendation/examples.
+2) Then you MUST re-ask the SAME question (same A–F options).
+3) You MUST NOT advance to the next question until the user picks A–F (or explicitly defers with F).
+
+---
+
+### Answer format requirement (strict)
+
+Require answers in **ONE single line**, using comma-separated pairs.
+
+**Valid format (case-insensitive):**
+- `Q1=A, Q2=D, Q3=C`
+- `q1=a, q2=d, q3=c`
+- `Q1=E: <text>, Q2=F, Q3=B`
+
+**Hard rules**
+- All answers MUST be in **one line** only (no newlines).
+- Items MUST be separated by commas `,`
+- A space after comma is optional: `Q1=A,Q2=B` is valid.
+- Letter choices are **case-insensitive** (A/a are equivalent).
+- For `E) Other`, the format MUST be: `Qn=E: <free text>`
+- For meta-options, the format MUST be: `Qn=G` or `Qn=H: A vs C` etc.
+
+If the user does not comply, politely ask them to resend using the exact format.
+
+## Step 1A — Constraints-first ordering (reduce confusion)
+
+In the first round(s), prioritize constraints before proposing “stack” choices. Ask about:
+- scale/throughput, latency, availability/SLA
+- budget/cost sensitivity
+- hosting/runtime constraints (Cloud Run? K8s? serverless?)
+- data sensitivity/security/privacy/compliance needs
+- integration boundaries (existing DB, APIs, auth)
+- idempotency/duplication tolerance
+- observability requirements
+
+---
+
+## Step 1B — Option briefs (mandatory)
+
+When you provide A–D technical options, each option MUST include a brief:
+
+**Format per option:**
+- **What it is (1 line)**
+- **When to use (1 line)**
+
+---
+
+## Step 1C — Unknown term detector (mandatory)
+
+If any option includes a term/technology/concept that has NOT appeared in the spec yet (or is niche), you MUST do one of:
+- Automatically include a 1–2 line definition inline, OR
+- Encourage `G) Explain options`
+
+Additionally, maintain a short **Glossary** section in SPEC.md for new terms introduced.
+
+---
+
+## Step 1D — Comparison rubric (fixed, consistent)
+
+When the user asks `H) Compare`, you MUST use the same rubric every time:
+
+1) Operational complexity  
+2) Reliability semantics (retries, DLQ, backoff)  
+3) Idempotency & dedupe story  
+4) Latency characteristics  
+5) Cost drivers  
+6) Observability (logs/metrics/tracing)  
+7) Vendor lock-in / portability  
+8) Edge-case risk (timeouts, concurrency, ordering)
+
+End with:
+- “If your #1 priority is X → choose …”
+- “If your #1 priority is Y → choose …”
+- Any “unknowns” that would change the recommendation
+
+---
+
+## Step 1E — Recommend mode requirements
+
+If the user asks `I) Recommend`, you MUST:
+- state the recommendation
+- state assumptions (explicitly)
+- list missing info (what would change the choice)
+- propose 1–2 follow-up questions (but do NOT exceed the 6–10 questions per round overall)
+
+---
+
+## Step 1F — Deferral guardrails (“F) decide later”)
+
+Deferral is allowed, but must be managed:
+
+- If the user picks `F` for a critical decision, you MUST:
+  - add it to **Open Questions** with a specific label,
+  - describe the consequence of deferring (what in PLAN is blocked or becomes more expensive),
+  - add a “Default if not decided” fallback (only if safe), clearly marked as provisional.
+
+---
+
+## Step 2 — Update SPEC.md continuously (no code)
+
+After each round (or when a decision is made), update `SPEC.md` with:
+- clarified requirements
+- constraints
+- flows (keep concise)
+- decisions and rationale
+- updated Open Questions (remove answered, add new)
+- glossary entries for new terms introduced
+
+### Mandatory SPEC structure (enforce)
+
+SPEC.md MUST contain these sections:
+
+1) **Summary**
+2) **Goals / Non-goals**
+3) **Constraints**
+4) **Key Flows** (numbered, keep minimal)
+5) **Data / Interfaces** (only what matters)
+6) **Edge cases & Failure modes**
+7) **Observability**
+8) **Security / Privacy**
+9) **Open Questions** (must end empty or explicitly deferred w/ consequences)
+10) **Decision Log** (living)
+11) **Changelog** (living)
+12) **Glossary** (short)
+
+### Decision logging (mandatory)
+
+Every resolved question must be captured in SPEC.md as:
+
+- **Decision:** <what was chosen>  
+- **Rationale:** 1–3 bullets tied to constraints
+- **Risks / mitigations:** (when relevant)
+
+### Changelog (mandatory, spec-anchored)
+
+SPEC.md MUST include a **Changelog** section.
+Whenever a change happens later (post-implementation learnings), it should be captured as:
+
+- YYYY-MM-DD — <change summary>
+  - reason: <why it changed> (keep concise)
+  - impact: <what else must update: tasks/plan/acceptance>
+
+Even though this skill does NOT implement code, it MUST set up the SPEC to support this future update flow.
+
+---
+
+## Step 2A — Enforce “Spec-anchored” contract
+
+You MUST add this statement into SPEC.md (verbatim):
 
 > The SPEC is the source of truth. If implementation deviates, update the SPEC + TASKS + ACCEPTANCE and record it in the Changelog.
 
-3) `TASKS.md` contains `## Execution status` as the LAST section  
-   - If missing/malformed: STOP and recommend fixing via `spec-interview`.
+---
 
-4) `TASKS.md` has minimally:
-   - Status
-   - Current task
-   - Last updated
+## Step 3 — Generate PLAN.md (no code)
 
-If `Status: DONE`:
-- STOP (nothing to implement).
+Only after Open Questions is empty (or explicitly deferred with documented guardrails), generate `PLAN.md`:
+- milestones
+- tasks grouped by phase
+- dependencies and prerequisites
+- observability, rollout/rollback plan
+- test strategy
+
+No implementation code.
+
+PLAN.md must remain **high-level**, not a checklist.
 
 ---
 
-# Hard execution guardrails (context + safety)
+## Step 4 — Generate TASKS.md (atomic tasks, mandatory)
 
-- You MUST implement **at most 1–2 tasks per run** (one “chunk”).
-- You MUST NOT implement multiple phases in a single run.
-- You MUST keep diffs small and reviewable.
-- You MUST NOT add “bonus features” or refactor unrelated code.
-- If a task implies large changes: STOP and recommend splitting tasks (return to `spec-interview` to adjust TASKS).
+After PLAN.md, you MUST create `TASKS.md` that converts the PLAN into:
+**atomic, reviewable tasks**  
+that can be implemented in **small chunks** safely
 
----
+### Definition: “atomic task”
+A task is atomic if it is:
+- small enough to implement without exceeding context
+- independently testable or verifiable
+- has clear inputs/outputs
+- has minimal dependencies
+- has a tight “done condition”
 
-# Strict execution rules
+### Hard rules for TASKS.md
 
-- Do NOT redesign.
-- Do NOT propose alternatives.
-- Do NOT re-open decisions already documented.
-- Do NOT add features not explicitly listed in SPEC/TASKS.
-- Do NOT “improve” the design.
-- Do NOT refactor unrelated code.
+- Tasks MUST be ordered.
+- Tasks MUST be grouped by phase.
+- Each task MUST have:
+  - **Goal**
+  - **Inputs**
+  - **Outputs**
+  - **Steps (tiny)**
+  - **Done condition**
+  - **Dependencies**
+  - **Risks**
+  - **Test/Verification**
+- Prefer **5–15 tasks total**.
+- If tasks would exceed ~15, you MUST suggest splitting the spec (use guardrails).
 
-If something is unclear:
-- Check SPEC first.
-- Then check the task definition in TASKS.
-- Then check PLAN.
-- If still unclear: STOP and report the ambiguity.
-- Do NOT guess.
+### TASKS.md format (mandatory)
 
----
+Use this exact structure:
 
-# Execution workflow
+# TASKS
 
-## Step 1 — Load and summarize the contract (brief)
+## Phase 0 — Setup / scaffolding
+- T0.1 <task title>
+  - Goal:
+  - Inputs:
+  - Outputs:
+  - Steps:
+  - Done condition:
+  - Dependencies:
+  - Risks:
+  - Test/Verification:
 
-Read:
-- `SPEC.md`
-- `PLAN.md`
-- `TASKS.md`
-- `ACCEPTANCE.md`
+## Phase 1 — Core logic
+(Generated tasks will appear here. Replace this placeholder with T1.x tasks.)
 
-Then produce a concise summary (5–8 bullets):
-- What must be built
-- What must NOT be built
-- Key constraints
-- Current execution status (from TASKS)
-- Which task(s) you will implement in this run
+## Phase 2 — Integration
+(Generated tasks will appear here. Replace this placeholder with T2.x tasks.)
 
-Task selection priority:
-1) User-requested tasks (if explicit and valid)
-2) Otherwise `Current task` from Execution status
+## Phase 3 — Observability / hardening
+(Generated tasks will appear here. Replace this placeholder with T3.x tasks.)
 
----
+## Phase 4 — Release / rollout
+(Generated tasks will appear here. Replace this placeholder with T4.x tasks.)
 
-## Step 2 — Validate task scope (mandatory)
 
-For each chosen task (max 2), verify it is well-defined:
-- Goal
-- Inputs
-- Outputs
-- Steps
-- Done condition
-- Dependencies
-- Risks
-- Test/Verification
+### Chunking rule (mandatory)
 
-If any field is missing or ambiguous:
-- STOP
-- Explain what is missing
-- Recommend returning to `spec-interview` to fix TASKS.md
-- Do NOT implement
+In `TASKS.md`, after listing all phases and tasks, you MUST include a `Chunking guidance` section containing:
 
----
+- **Suggested implementation chunk size:** 1–2 tasks per chunk
+- **Review cadence:** after each chunk, verify acceptance criteria impacted by those tasks
+- **Stop points:** “safe to stop here” markers after phases
 
-## Step 3 — Implement (task-driven)
+### Execution status block (mandatory)
 
-Implement ONLY what is required to satisfy:
-- the chosen TASK(s)
-- the SPEC constraints
+At the very end of `TASKS.md`, you MUST include an `Execution status` section to make the work resumable across sessions.
 
-Rules:
-- Touch only files implied by the task(s).
-- Preserve existing conventions and style.
-- Prefer minimal, reviewable diffs.
-- If you need a new file/module, it must be justified by task outputs.
+This section MUST be the last section in the file.
 
-### If you discover a necessary deviation (spec-anchored rule)
+**Initial value requirement (mandatory)**
+When generating `TASKS.md` for the first time, you MUST initialize it exactly as follows:
 
-If implementation forces a change to requirements (API shape, flow behavior, constraints, edge-case semantics):
-- STOP immediately (no partial hacks)
-- Propose a SPEC update with:
-  - exact change
-  - why it’s necessary
-  - impact on TASKS + ACCEPTANCE
-- Update ONLY docs first (SPEC/TASKS/ACCEPTANCE + SPEC Changelog)
-- Continue implementation ONLY after docs are consistent
-
-You MUST record the change in SPEC Changelog as:
-- YYYY-MM-DD — <change summary>
-  - reason: <why it changed>
-  - impact: <what updated: tasks/plan/acceptance>
+    ## Execution status
+    - Status: NOT_STARTED
+    - Current task: T0.1
+    - Completed tasks: (optional)
+    - Last updated: YYYY-MM-DD
 
 ---
 
-## Step 4 — Verification (minimal + targeted)
+## Step 5 — Generate ACCEPTANCE.md (no code)
 
-Verify against ACCEPTANCE.md, but keep it scoped:
-- Run tests if they exist.
-- If no tests exist, perform verification steps from each implemented task.
+Generate acceptance criteria:
+- functional acceptance tests (happy path + edge cases)
+- non-functional criteria (latency, reliability, cost ceilings if provided)
+- observability checks
+- security/privacy checks
+- rollback criteria
 
-You MUST report:
-- What you verified
-- What you did NOT verify (and why)
+No implementation code.
 
-You MUST NOT add new tooling unless PLAN/TASKS explicitly say so.
+### Acceptance size guardrail (scope vs quality)
 
----
+ACCEPTANCE.md should remain small enough to be usable during chunked implementation.
 
-## Step 5 — Update TASKS Execution status (mandatory)
+**Soft limit:** aim for 6–10 criteria total.
 
-After successful implementation of the task(s), update `TASKS.md` → `## Execution status`:
+If ACCEPTANCE.md exceeds **10 criteria**, you MUST do this in order:
 
-Rules:
-- Status transitions:
-  - NOT_STARTED → IN_PROGRESS (when first task begins)
-  - IN_PROGRESS stays until all tasks complete
-  - DONE only when all tasks are complete
-- Move Current task to the next pending task
-- Update Last updated = YYYY-MM-DD
+1) **Normalize (mandatory):**
+   - Merge redundant criteria.
+   - Group by category:
+     - Functional (happy path)
+     - Edge cases / failure modes
+     - Non-functional (latency, cost, reliability)
+     - Observability
+     - Security/Privacy
+   - Prefer fewer, stronger criteria over many tiny ones.
 
-If all tasks are complete:
-- Set Status: DONE
-- Current task: (none)
+2) **Split decision (only if scope indicates it):**
+   Propose splitting into 2 specs ONLY if at least one is true:
+   - The spec has **> 3 major flows**, OR
+   - Criteria naturally split into **2 independent deliverables** (e.g., "core feature" vs "admin/backoffice"), OR
+   - There are **multiple integration boundaries** that can ship independently.
 
----
-
-## Step 6 — Maintain CHECKPOINT.md (mandatory)
-
-This skill MUST create/update:
-- `docs/specs/<slug>/CHECKPOINT.md`
-
-### Objective of CHECKPOINT.md
-Provide a short “resume safely” snapshot:
-- what was completed in practice
-- what is next
-- important constraints/gotchas discovered during implementation
-- safe resume instructions
-
-### Hard rules for CHECKPOINT.md
-- MUST be concise (aim: 10–25 lines)
-- MUST NOT duplicate TASKS definitions
-- MUST NOT introduce new requirements (those belong in SPEC.md)
-- MUST be updated after every run that changes code
-
-### Required CHECKPOINT.md structure (enforce)
-
-`CHECKPOINT.md` MUST contain:
-
-1) Title + slug  
-2) Last updated date  
-3) Completed (task IDs)  
-4) Current / Next (task IDs)  
-5) Important constraints (max 3 bullets)  
-6) Gotchas / Risks discovered (max 5 bullets)  
-7) Safe resume instructions (max 5 bullets)  
-
-Example structure (use exactly these headings):
-
-    # CHECKPOINT — <slug>
-
-    Last updated: YYYY-MM-DD
-
-    ## Completed
-    - T0.1 ...
-    - T1.1 ...
-
-    ## Current / Next
-    - Next task: T1.2 ...
-    - Status: READY
-
-    ## Important constraints
-    - ...
-
-    ## Gotchas / Risks discovered
-    - ...
-
-    ## Safe resume instructions
-    - ...
+If split is triggered:
+- Propose Spec A (core value) + Spec B (extensions/hardening/integrations)
+- Move acceptance criteria accordingly.
 
 ---
 
-## Step 7 — Report (concise + factual)
+# Interview question quality guidelines
 
-After implementation, report:
-
-1) Tasks implemented in this run:
-   - T?.? title — done condition satisfied (yes/no)
-
-2) Files changed:
-   - path — reason
-
-3) Verification:
-   - Acceptance criteria impacted: Passed / Failed / Not checked
-   - Test results (if applicable)
-
-4) Execution status updates:
-   - New status + next task
-
-5) CHECKPOINT update summary:
-   - What changed in CHECKPOINT.md (1–3 bullets)
-
-6) Deviations (if any):
-   - Must link back to SPEC Changelog entry
+Avoid obvious questions. Favor:
+- failure modes & edge cases
+- rollout/rollback strategy
+- rate limits, retries, concurrency, ordering
+- idempotency & deduplication
+- data ownership & retention
+- security/privacy/compliance implications
+- observability & SLOs
+- migration/backward compatibility constraints
+- cost drivers & quotas
 
 ---
 
-# Failure mode
+# Output discipline
 
-If at any point SPEC/TASKS/ACCEPTANCE are insufficient to implement safely:
-- Stop.
-- Explain precisely what is missing.
-- Recommend returning to `spec-interview`.
-
-This skill values **discipline over creativity**.
+- Do not create any files other than SPEC.md, PLAN.md, TASKS.md, ACCEPTANCE.md in the target folder.
+- Do not implement code.
+- Do not propose “final architecture” until constraints are captured.
+- When uncertain, ask; do not assume.
 
