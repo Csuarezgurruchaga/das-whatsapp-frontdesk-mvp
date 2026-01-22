@@ -82,41 +82,94 @@ If `Status: DONE`:
 
 ---
 
-# Python virtual environment rule (mandatory)
+# Environment & dependency management (mandatory)
+
+This skill MUST keep dependency installation isolated and reproducible.
+
+If the selected task involves Python, you MUST use `.venv/`.
+If the selected task involves JavaScript/TypeScript (frontend), you MUST use the repo’s Node package manager workflow.
+
+You MUST NOT install dependencies globally (neither Python nor Node).
+
+---
+
+## Python virtual environment rule (mandatory)
 
 If the repo contains Python code OR the selected task involves running Python:
 
-## Always use `.venv/`
+### Always use `.venv/`
 - You MUST use a project-local virtual environment at `.venv/`.
 - If `.venv/` does NOT exist, you MUST create it.
 - If `.venv/` exists, you MUST reuse it across sessions (do NOT create another env elsewhere).
-- You MUST NOT install dependencies globally.
 
-## pip baseline (mandatory)
+### pip baseline (mandatory)
 After creating/activating `.venv/`, you MUST upgrade pip inside the venv BEFORE any installs:
-
 - `python -m pip install --upgrade pip`
 
-## Dependency file policy (supports bootstrapping new projects)
+### Dependency file policy (supports bootstrapping new projects)
 
-### If a dependency definition file exists
-Dependencies MUST be installed inside `.venv/` using `requirements.txt`
+#### If a dependency definition file exists
+Install dependencies inside `.venv/` using one of:
+- `requirements.txt`
+- `requirements-dev.txt`
 
-### If NO dependency definition file exists (new project bootstrap)
+#### If NO dependency definition file exists (new project bootstrap)
 If the project is being created from scratch and dependencies are not yet defined:
 - You MUST create a minimal `requirements.txt` (it may be empty initially)
 - You MUST continue execution using `.venv/`
 
-If the chosen task explicitly requires specific dependencies to proceed:
+If the chosen task explicitly requires specific Python dependencies to proceed:
 - You MUST add ONLY the minimum required packages to `requirements.txt`
 - Do NOT guess versions unless SPEC/TASKS defines them
-- Prefer leaving versions unpinned unless the task requires pinning
 
-A task that introduces new dependencies is NOT complete unless:
+A task that introduces new Python dependencies is NOT complete unless:
 - the dependency is recorded in `requirements.txt`
-- the verification step runs using `.venv/`
+- verification runs using `.venv/`
 
 ---
+
+## Frontend (JavaScript/TypeScript) dependency rule (mandatory)
+
+If the repo contains frontend JS/TS code OR the selected task involves frontend tooling:
+
+### Always use a package-lock based workflow
+You MUST install dependencies using the repo-defined package manager:
+
+- If `package-lock.json` exists → use `npm`
+- If `yarn.lock` exists → use `yarn`
+- If `pnpm-lock.yaml` exists → use `pnpm`
+
+Rules:
+- You MUST NOT mix package managers in the same repo.
+- You MUST NOT delete lockfiles unless the task explicitly requires it.
+- You MUST commit lockfile changes if dependencies change.
+
+### Bootstrap for new frontend projects
+If `package.json` does not exist and the project is being created from scratch:
+- You MUST create a minimal `package.json`
+- You MUST continue execution with the chosen package manager
+
+If the chosen task explicitly requires specific frontend dependencies:
+- You MUST add ONLY the minimum required packages
+- Prefer using the lockfile to keep installs reproducible
+
+A task that introduces new frontend dependencies is NOT complete unless:
+- dependencies are recorded in `package.json`
+- the lockfile is updated consistently
+- verification/build runs using the repo’s Node workflow
+
+---
+
+## Session resumption rule (Codex continuity)
+
+This skill is designed to be resumable across sessions.
+
+Therefore:
+- If a new Codex session starts and `.venv/` already exists, you MUST reuse it.
+- If a lockfile already exists (`package-lock.json`, `yarn.lock`, or `pnpm-lock.yaml`), you MUST keep using it.
+
+---
+
 
 # Hard execution guardrails
 
@@ -409,4 +462,3 @@ If at any point SPEC/TASKS/ACCEPTANCE are insufficient to implement safely:
 - Recommend returning to `spec-interview`
 
 This skill values **discipline over creativity**.
-
