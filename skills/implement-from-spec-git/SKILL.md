@@ -260,11 +260,32 @@ Task selection priority:
 
 ## Step 2 — Ensure correct branch (mandatory)
 
-You MUST ensure you are on:
+All implementation MUST happen on:
 - `impl/<slug>`
 
-If the branch does not exist:
-- Create it from the default branch (usually `main`), then switch to it.
+### Bootstrap rule (new repositories)
+If `main` and `dev` do not exist yet (new project):
+- You MUST initialize the repo if needed.
+- You MUST create `main` first.
+- You MUST create `dev` from `main`.
+
+After that:
+- Continue with the normal branch rules below.
+
+### Branch base rule (normal flow)
+- If `dev` exists, you MUST create/sync `impl/<slug>` from `dev`.
+- Otherwise, create/sync `impl/<slug>` from `main`.
+
+### Rules
+- You MUST NOT implement directly on `main`.
+- You SHOULD NOT implement directly on `dev` (dev is the integration branch).
+
+### Actions
+If `impl/<slug>` does not exist:
+- Create it from the correct base branch, then switch to it.
+
+If `impl/<slug>` already exists:
+- Switch to it and continue work there.
 
 ---
 
