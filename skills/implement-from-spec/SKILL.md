@@ -79,6 +79,42 @@ If `Status: DONE`:
 
 ---
 
+# Python virtual environment rule (mandatory)
+
+If the repo contains Python code OR the selected task involves running Python:
+
+## Always use `.venv/`
+- You MUST use a project-local virtual environment at `.venv/`.
+- If `.venv/` does NOT exist, you MUST create it.
+- If `.venv/` exists, you MUST reuse it across sessions (do NOT create another env elsewhere).
+- You MUST NOT install dependencies globally.
+
+## pip baseline (mandatory)
+After creating/activating `.venv/`, you MUST upgrade pip inside the venv BEFORE any installs:
+
+- `python -m pip install --upgrade pip`
+
+## Dependency file policy (supports bootstrapping new projects)
+
+### If a dependency definition file exists
+Dependencies MUST be installed inside `.venv/` using `requirements.txt`
+
+### If NO dependency definition file exists (new project bootstrap)
+If the project is being created from scratch and dependencies are not yet defined:
+- You MUST create a minimal `requirements.txt` (it may be empty initially)
+- You MUST continue execution using `.venv/`
+
+If the chosen task explicitly requires specific dependencies to proceed:
+- You MUST add ONLY the minimum required packages to `requirements.txt`
+- Do NOT guess versions unless SPEC/TASKS defines them
+- Prefer leaving versions unpinned unless the task requires pinning
+
+A task that introduces new dependencies is NOT complete unless:
+- the dependency is recorded in `requirements.txt`
+- the verification step runs using `.venv/`
+
+---
+
 # Hard execution guardrails (context + safety)
 
 - You MUST implement **at most 1–2 tasks per run** (one “chunk”).
