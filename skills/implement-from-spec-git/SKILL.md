@@ -170,6 +170,21 @@ Therefore:
 
 ---
 
+# Browser verification policy (web apps)
+
+This skill MAY use Playwright for browser-level verification, but ONLY when required by contract.
+
+Playwright MUST be used only if:
+- the current task changes user-facing behavior (UI, routing, auth, forms), AND
+- ACCEPTANCE.md or TASKS.md explicitly requires browser-level verification.
+
+If those conditions are not met:
+- Do NOT run browser automation.
+- Do NOT add E2E tests.
+- Limit verification to repo-defined checks (unit tests / lint / build).
+
+Chrome DevTools MCP MUST NOT be used for functional E2E validation unless the task explicitly requires
+performance/network/rendering diagnostics.
 
 # Hard execution guardrails
 
@@ -310,6 +325,16 @@ If any field is missing or ambiguous:
 ---
 
 ## Step 4 — Implement task(s) (task-driven)
+
+### Browser smoke verification (conditional)
+
+If the task impacts user-facing behavior (UI, routing, auth, forms) AND ACCEPTANCE/TASKS require browser-level validation:
+- You MUST run a minimal Playwright smoke check (happy path only).
+- Keep it small and reliable (avoid flaky waits, no broad E2E suites unless TASKS explicitly require them).
+- Report the exact checks performed and outcome.
+
+Otherwise:
+- Do NOT run Playwright.
 
 Implement ONLY what is required to satisfy:
 - the chosen task(s)

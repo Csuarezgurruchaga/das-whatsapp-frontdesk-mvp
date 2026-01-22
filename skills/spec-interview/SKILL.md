@@ -419,6 +419,18 @@ When generating `TASKS.md` for the first time, you MUST initialize it exactly as
 
 ## Step 5 — Generate ACCEPTANCE.md (no code)
 
+### Web app baseline acceptance (mandatory)
+
+If the product includes a web UI (frontend / browser-based app), you MUST include this baseline criterion in ACCEPTANCE.md:
+
+## A0 — Browser smoke (web)
+- The app loads in Chromium without critical console errors.
+- The primary happy-path flow works end-to-end in the browser.
+
+Notes:
+- Keep A0 minimal (smoke only).
+- Do NOT add a full E2E test suite unless explicitly required by scope.
+
 Generate acceptance criteria:
 - functional acceptance tests (happy path + edge cases)
 - non-functional criteria (latency, reliability, cost ceilings if provided)
