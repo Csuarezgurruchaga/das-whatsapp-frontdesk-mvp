@@ -78,7 +78,9 @@ Before writing code, you MUST verify:
    - Last updated
 
 If `Status: DONE`:
-- STOP (nothing to implement).
+- Do NOT implement new code.
+- Proceed to Promotion workflow (Step 10) if `dev` is behind `impl/<slug>`.
+- Then STOP.
 
 ---
 
@@ -247,6 +249,30 @@ Commit message examples:
 
 - You MUST push after each chunk (after 1–2 tasks) so the work is persisted remotely.
 - If the push fails, STOP and report the error.
+
+---
+
+# TASK progress accounting (mandatory)
+
+This skill MUST compute and report progress on every run:
+
+- Total tasks = count of all unique TaskIDs (`T<number>.<number>`) present in the TASKS backlog.
+- Completed tasks = count of tasks marked done via either:
+  A) checklist format `- [x] T?.? ...`
+  OR
+  B) a `Completed tasks:` list inside `## Execution status` (if present)
+
+If neither A nor B exists:
+- Completed tasks = 0
+- You MUST recommend adding checkboxes or a Completed tasks list for accurate progress
+
+You MUST report progress as:
+- `TASKS progress: <done>/<total>`
+- `Current task: <TaskID>`
+- `Remaining: <total-done>`
+
+Optionally persist in `## Execution status` as:
+- `Progress: <done>/<total>`
 
 ---
 
@@ -487,6 +513,53 @@ After the chunk, report:
 
 ---
 
+# Promotion workflow (mandatory when appropriate)
+
+## Step 10 — Promote to `dev` (staging) safely
+
+Goal: ensure `dev` becomes deployable without destructive automation.
+
+Trigger conditions:
+- EITHER user explicitly asks to promote/merge
+- OR `Status: DONE` in TASKS.md AND `impl/<slug>` is ahead of `dev`
+
+Rules:
+- Prefer PR over direct merge (audit trail + safe review gate)
+- No force-push
+- No rebasing shared branches
+
+Actions:
+A) Create PR:
+- Source: `impl/<slug>`
+- Target: `dev`
+- Title: `(<slug>) Promote implementation to dev`
+- Body MUST include:
+  - Tasks completed
+  - TASKS progress done/total
+  - Verification summary
+  - Acceptance status
+
+B) If the user asked for auto-merge AND checks are green:
+- Merge PR using a non-destructive merge strategy (merge commit or squash)
+- Confirm `dev` now contains deliverables
+
+If user did NOT request auto-merge:
+- STOP after creating PR and report PR link/details.
+
+---
+
+## Step 11 — Promote to `main` (production) safely (only if user asks)
+
+This skill MUST NOT promote to `main` automatically unless user requests.
+
+If requested:
+- Ensure `dev` is validated (tests/build/smoke per ACCEPTANCE)
+- Create PR `dev` → `main`
+- Title: `(<slug>) Release to main`
+- Body includes acceptance verification + deployment notes
+
+---
+
 # Optional: PR guidance (only if user asks)
 
 If the user requests a PR:
@@ -500,11 +573,12 @@ If the user requests a PR:
 
 ---
 
-# Failure mode
+# Failure mode (mandatory)
 
 If at any point SPEC/TASKS/ACCEPTANCE are insufficient to implement safely:
-- STOP
-- Explain precisely what is missing
-- Recommend returning to `spec-interview`
+- STOP immediately
+- Explain precisely what is missing (quote the missing fields)
+- Recommend returning to `spec-interview` to repair the contract
+- Do NOT implement partial hacks or speculative code
 
 This skill values **discipline over creativity**.
