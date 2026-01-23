@@ -356,7 +356,7 @@ A task is atomic if it is:
   - **Outputs**
   - **Steps (tiny)**
   - **Done condition**
-  - **Dependencies**
+  - **Depends on** (MUST be a bracketed list of task IDs like `[T0.1, T1.2]` or `[]`)
   - **Risks**
   - **Test/Verification**
 - Prefer **5–15 tasks total**.
@@ -375,7 +375,7 @@ Use this exact structure:
   - Outputs:
   - Steps:
   - Done condition:
-  - Dependencies:
+  - Depends on: []
   - Risks:
   - Test/Verification:
 
@@ -391,6 +391,17 @@ Use this exact structure:
 ## Phase 4 — Release / rollout
 (Generated tasks will appear here. Replace this placeholder with T4.x tasks.)
 
+### Dependency rules (mandatory)
+
+In `TASKS.md`, each task MUST include:
+
+- `Depends on: []` for tasks with no prerequisites, OR
+- `Depends on: [T0.1, T1.2]` referencing existing task IDs only
+
+Hard rules:
+- Dependencies MUST reference existing task IDs only (no free-text).
+- Cycles are not allowed. If a cycle would occur, restructure tasks.
+- Prefer minimal dependencies: only list true blockers.
 
 ### Chunking rule (mandatory)
 

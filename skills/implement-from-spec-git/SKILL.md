@@ -198,6 +198,46 @@ performance/network/rendering diagnostics.
 
 ---
 
+# Multi-agent collaboration safety (mandatory)
+
+This environment may use multiple collaborating agents.
+
+You are not alone in this environment. Do not impact or overwrite the work of others.
+Assume other agents may be running concurrently.
+
+## Definitions
+- PRIMARY (orchestrator) agent: the main agent running this skill and coordinating execution.
+- Sub-agents: helper agents spawned by the PRIMARY (orchestrator) agent.
+
+## Single-writer policy (hard)
+- Only the PRIMARY (orchestrator) agent may:
+  - change branches
+  - stage/commit/push
+  - update SPEC/PLAN/TASKS/ACCEPTANCE/CHECKPOINT
+  - perform merges or resolve conflicts
+
+## Sub-agent scope policy (hard)
+If sub-agents are used:
+- Each sub-agent MUST work on exactly ONE assigned TaskID.
+- Sub-agents MUST NOT pick their own tasks.
+- Sub-agents MUST NOT modify files outside the minimum needed for their assigned task.
+- Sub-agents MUST NOT update docs or Git state.
+- Sub-agents MUST report changes and verification results back to the PRIMARY (orchestrator) agent.
+
+## No-collision rule (hard)
+- Sub-agents MUST NOT edit the same file concurrently.
+- If overlap risk exists, the PRIMARY (orchestrator) agent MUST serialize work instead of parallelizing.
+
+## Integration rule (hard)
+- The PRIMARY (orchestrator) agent integrates sub-agent work sequentially:
+  - review changes
+  - run verification
+  - commit per task
+  - update TASKS Execution status + CHECKPOINT
+  - push per chunk
+
+---
+
 # Strict execution rules
 
 - Do NOT redesign.
@@ -338,9 +378,12 @@ For each chosen task (max 2), verify it is well-defined:
 - Outputs
 - Steps
 - Done condition
-- Dependencies
+- Depends on
 - Risks
 - Test/Verification
+
+Hard rule:
+- Depends on must exist and MUST be a bracketed list of task IDs like `[]` or `[T0.1, T1.2]`
 
 If any field is missing or ambiguous:
 - STOP
