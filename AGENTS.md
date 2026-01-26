@@ -69,3 +69,16 @@ Always use GitHub username: `csuarezgurruchaga` (display: `@csuarezgurruchaga`).
 - "Create an issue in [repo-name] for [description]"
 - "Search for files containing [keyword] in [repo-name]"
 - "List open pull requests in [repo-name]"
+
+### Context7 MCP
+Provides just-in-time documentation/context retrieval for libraries and frameworks.
+
+**When to use:**
+- Confirm APIs, versions, edge cases, or canonical usage
+- Validate best practices against official docs before implementing
+- Resolve ambiguous framework/SDK behavior to avoid wrong assumptions
+
+**Common tasks:**
+- "Check the correct usage of [library/function]"
+- "Confirm breaking changes between versions of [library]"
+- "Find a minimal example for [framework feature]"
