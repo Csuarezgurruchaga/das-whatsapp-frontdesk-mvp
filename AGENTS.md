@@ -82,3 +82,18 @@ Provides just-in-time documentation/context retrieval for libraries and framewor
 - "Check the correct usage of [library/function]"
 - "Confirm breaking changes between versions of [library]"
 - "Find a minimal example for [framework feature]"
+
+### Playwright MCP
+Provides real browser automation for UI verification (navigate, click, fill forms, wait for selectors/URLs, take screenshots).
+
+**When to use:**
+- Validate UI changes (routing, layout, CSS, components)
+- Reproduce or verify a reported frontend bug
+- Smoke-test critical flows (login, submit forms, navigation)
+- Capture evidence (screenshots/logs) for PRs or specs
+
+**Common tasks:**
+- "Open [URL] and take desktop + mobile screenshots"
+- "Verify login redirects to /dashboard"
+- "Check main navigation links aren’t broken"
+- "Reproduce bug: [steps] and capture screenshots + console errors"
