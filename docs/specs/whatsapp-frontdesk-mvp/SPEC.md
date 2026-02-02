@@ -44,6 +44,10 @@ Build an on‑premise compatible system that integrates with the WhatsApp Busine
 - Initial testing should work locally, preferably via `docker-compose`.
 - Realtime choice: WebSockets (primary) for message/list updates (no typing/presence in MVP).
 - Authentication choice: server-side sessions with secure cookies.
+- Backend: Python 3.11+ with FastAPI.
+- Database: MySQL (dedicated database `chatbot_mvp` with a dedicated, least-privileged user).
+- Persistence: SQLAlchemy 2.0 ORM + Alembic migrations (versioned).
+- DB driver: PyMySQL (default), with the option to migrate to `mysqlclient` if required.
 - WhatsApp integration: WhatsApp Business Cloud API (webhook inbound + outbound send).
 - Bot menus/flows must be configurable via YAML stored on disk; YAML path is configured via environment/config and reload is triggered via an admin-only endpoint (no UI required).
   - Env var: `BOT_MENU_YAML_PATH` (default `./config/bot.yaml`).
@@ -238,6 +242,10 @@ None.
 - 2026-01-29 — **Decision:** YAML lives on disk and is configured by path from environment/config.
   - **Rationale:** fits on-prem operation patterns and allows editing without rebuilding images.
 - 2026-01-29 — **Decision:** YAML nodes include `on_enter_text` and `terminal_text` (plus options routing/actions).
+## Changelog
+- 2026-02-02 — Added backend stack decisions (FastAPI + SQLAlchemy + Alembic) and MySQL constraints.
+  - reason: required to implement data model and migrations for Phase 1.
+  - impact: SPEC constraints updated; no TASKS/ACCEPTANCE changes.
   - **Rationale:** supports multi-step submenus and end-of-flow copy without code changes.
 - 2026-01-29 — **Decision:** Persist WhatsApp receipts/events for audit only (no UI in MVP).
   - **Rationale:** preserves delivery traceability without expanding the UI scope.
