@@ -18,6 +18,8 @@ Last updated: 2026-02-02
 - Implement only tasks defined in docs/specs/whatsapp-frontdesk-mvp/TASKS.md (1–2 per chunk).
 - Use BOT_MENU_YAML_PATH default ./config/bot.yaml for local config layout.
 - Reverse proxy terminates TLS and forwards X-Forwarded-* headers.
+- Admin may close any assigned conversation without self-assignment (responding still requires assignment).
+- Admin reassign targets must be agents or the current admin (no reassignment to other admins).
 
 ## Gotchas / Risks discovered
 - Required WhatsApp credentials have no defaults; ensure they are set in non-dev environments.

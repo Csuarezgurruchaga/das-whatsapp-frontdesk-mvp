@@ -179,6 +179,8 @@ Handoff is represented as an explicit option in a menu (not an automatic termina
 - Authorization:
   - `agent` can only read/respond to conversations assigned to them; can preview `CHATBOT` and `EN ESPERA` as read-only.
   - `admin` can view everything and can respond only after assigning the conversation to themselves.
+  - `admin` can close any `ASIGNADO` conversation without assigning it to themselves.
+  - `admin` can reassign only to agents or to themselves; reassignment to other admins is not allowed.
 - Password hashing using a modern algorithm (exact choice to be decided in implementation; acceptable to defer).
 - PII handling: WhatsApp numbers are sensitive; define retention/audit requirements (deferred; document operational policy separately).
 
@@ -238,6 +240,14 @@ None.
   - **Rationale:** confirms queue entry while minimizing noise.
 - 2026-01-29 — **Decision:** WebSockets exclude typing/presence in MVP.
   - **Rationale:** user deferred typing/presence; keep realtime scope minimal.
+
+## Changelog
+- 2026-02-02 — Clarify admin close permissions
+  - reason: admin must be able to close assigned conversations without self-assignment
+  - impact: updated SPEC authorization and ACCEPTANCE A6; T1.4 step clarified
+- 2026-02-02 — Clarify admin reassign target roles
+  - reason: admin can assign to agents or to themselves but not to other admins
+  - impact: updated SPEC authorization, ACCEPTANCE A5, and T1.4 step
 - 2026-01-29 — **Decision:** In YAML flows, handoff is represented as an explicit menu option (not an automatic terminal action).
 
 ## Changelog

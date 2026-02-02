@@ -70,7 +70,8 @@
   - Outputs: APIs/commands for take/reassign/close with correct locking/transactions.
   - Steps:
     - Implement atomic “take conversation” so only one agent can succeed.
-    - Implement admin reassign and ensure list visibility updates.
+    - Implement admin reassign to agents or self (not other admins) and ensure list visibility updates.
+    - Allow admin to close an assigned conversation without self-assignment.
     - Implement close and ensure it disappears from all 3 tabs; create new conversation on post-close inbound with link.
   - Done condition: Concurrency tests show exclusivity; audit events are emitted.
   - Depends on: [T1.1, T1.2, T1.3]

@@ -31,11 +31,12 @@ Saludos”
 - User replies are ingested via webhook and appear in the assigned agent’s UI.
 
 ## A5 — Admin reassign + admin reply safety
-- Admin can force-reassign an assigned conversation to a different agent; it moves between agents’ `ASIGNADOS` accordingly.
+- Admin can force-reassign an assigned conversation to a different agent or to themselves (not to other admins); it moves between `ASIGNADOS` accordingly.
 - Admin can only reply after assigning the conversation to themselves (no double-operator replies).
 
 ## A6 — Close conversation + post-close new conversation linking
 - Closing a conversation sets state `CERRADO`, records who/when, and removes it from all 3 tabs while preserving history.
+- Admin can close an `ASIGNADO` conversation without assigning it to themselves.
 - If the user messages after `CERRADO`, a new conversation is created in `CHATBOT` and links to the previous one via `previous_conversation_id`.
 
 ## A7 — Security + audit baseline
