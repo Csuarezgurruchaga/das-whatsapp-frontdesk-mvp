@@ -14,7 +14,8 @@ from app.api.deps import (
     require_roles,
 )
 from app.db import crud
-from app.db.models import Conversation, ConversationEventType, ConversationState, User, UserRole
+from app.db.models import Conversation, ConversationEventType, ConversationState, SenderType, User, UserRole
+from app.whatsapp import send_outbound_text
 
 router = APIRouter()
 
@@ -28,6 +29,17 @@ class ConversationActionResponse(BaseModel):
 
 class ReassignRequest(BaseModel):
     assignee_user_id: int
+
+
+class SendMessageRequest(BaseModel):
+    text: str
+
+
+class SendMessageResponse(BaseModel):
+    ok: bool
+    conversation_id: int
+    message_id: int
+    whatsapp_message_id: str | None
 
 
 @router.post("/{conversation_id}/take", response_model=ConversationActionResponse)
@@ -199,4 +211,45 @@ def close_conversation(
         conversation_id=conversation_id,
         state=ConversationState.CERRADO.value,
         assigned_to=None,
+    )
+
+
+@router.post("/{conversation_id}/messages", response_model=SendMessageResponse)
+def send_message(
+    conversation_id: int,
+    payload: SendMessageRequest,
+    current_user: User = Depends(get_current_user),
+    db: Session = Depends(get_db),
+) -> SendMessageResponse:
+    conversation = crud.get_conversation(db, conversation_id=conversation_id)
+    if conversation is None:
+        raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail="Conversation not found")
+
+    ensure_can_respond_conversation(current_user, conversation)
+
+    text = payload.text.strip()
+    if not text:
+        raise HTTPException(status_code=status.HTTP_400_BAD_REQUEST, detail="Message text is required")
+
+    if conversation.contact is None:
+        raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail="Contact not found")
+
+    result = send_outbound_text(
+        db,
+        conversation_id=conversation_id,
+        to_number=conversation.contact.whatsapp_number,
+        text=text,
+        sender_type=SenderType.AGENT,
+        actor_user_id=current_user.id,
+    )
+    db.commit()
+
+    if not result.ok:
+        raise HTTPException(status_code=status.HTTP_502_BAD_GATEWAY, detail="WhatsApp send failed")
+
+    return SendMessageResponse(
+        ok=True,
+        conversation_id=conversation_id,
+        message_id=result.message_id,
+        whatsapp_message_id=result.whatsapp_message_id,
     )

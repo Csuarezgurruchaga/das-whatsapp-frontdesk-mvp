@@ -15,6 +15,7 @@ from app.api.deps import get_db
 from app.bot import menu as bot_menu
 from app.db import crud
 from app.db.models import ConversationState, MessageDirection, MessageReceiptStatus, SenderType
+from app.whatsapp import send_outbound_text
 
 router = APIRouter()
 
@@ -203,6 +204,7 @@ def _handle_chatbot_message(
     db: Session,
     *,
     conversation_id: int,
+    whatsapp_number: str,
     inbound_text: str,
     now: datetime,
 ) -> ConversationState:
@@ -212,14 +214,15 @@ def _handle_chatbot_message(
 
     if current_node_id is None and not inbound_text.strip().isdigit():
         root_node = config.nodes[config.root]
-        crud.append_message(
+        send_outbound_text(
             db,
             conversation_id=conversation_id,
-            direction=MessageDirection.OUTBOUND,
-            sender_type=SenderType.BOT,
+            to_number=whatsapp_number,
             text=root_node.on_enter_text,
+            sender_type=SenderType.BOT,
+            actor_user_id=None,
+            now=now,
         )
-        crud.touch_conversation(db, conversation_id=conversation_id, now=now)
         return ConversationState.CHATBOT
 
     route = bot_menu.route_chatbot_input(
@@ -229,12 +232,14 @@ def _handle_chatbot_message(
         now=now,
     )
     for message in route.messages:
-        crud.append_message(
+        send_outbound_text(
             db,
             conversation_id=conversation_id,
-            direction=MessageDirection.OUTBOUND,
-            sender_type=SenderType.BOT,
+            to_number=whatsapp_number,
             text=message,
+            sender_type=SenderType.BOT,
+            actor_user_id=None,
+            now=now,
         )
 
     if route.handoff_requested and route.handoff_available:
@@ -246,8 +251,6 @@ def _handle_chatbot_message(
             now=now,
         )
         return ConversationState.EN_ESPERA
-
-    crud.touch_conversation(db, conversation_id=conversation_id, now=now)
     return ConversationState.CHATBOT
 
 
@@ -255,18 +258,20 @@ def _handle_waiting_message(
     db: Session,
     *,
     conversation_id: int,
+    whatsapp_number: str,
     now: datetime,
 ) -> None:
     bot_texts = crud.list_bot_message_texts(db, conversation_id=conversation_id)
     if bot_menu.should_send_waiting_followup(bot_texts):
-        crud.append_message(
+        send_outbound_text(
             db,
             conversation_id=conversation_id,
-            direction=MessageDirection.OUTBOUND,
-            sender_type=SenderType.BOT,
+            to_number=whatsapp_number,
             text=bot_menu.WAITING_FOLLOWUP_TEXT,
+            sender_type=SenderType.BOT,
+            actor_user_id=None,
+            now=now,
         )
-    crud.touch_conversation(db, conversation_id=conversation_id, now=now)
 
 
 def _process_inbound_message(
@@ -311,19 +316,42 @@ def _process_inbound_message(
         return
 
     if state == ConversationState.CHATBOT:
-        _handle_chatbot_message(db, conversation_id=conversation_id, inbound_text=inbound.text, now=now)
+        _handle_chatbot_message(
+            db,
+            conversation_id=conversation_id,
+            whatsapp_number=inbound.from_number,
+            inbound_text=inbound.text,
+            now=now,
+        )
     elif state == ConversationState.EN_ESPERA:
-        _handle_waiting_message(db, conversation_id=conversation_id, now=now)
+        _handle_waiting_message(
+            db,
+            conversation_id=conversation_id,
+            whatsapp_number=inbound.from_number,
+            now=now,
+        )
 
 
 def _process_receipt(db: Session, receipt: InboundReceipt) -> None:
     status_value = _RECEIPT_STATUS_MAP.get(receipt.status or "")
-    if status_value is None or receipt.whatsapp_message_id is None:
+    if status_value is None:
+        return
+
+    message_id = None
+    if receipt.whatsapp_message_id:
+        message = crud.get_message_by_whatsapp_message_id(
+            db, whatsapp_message_id=receipt.whatsapp_message_id
+        )
+        if message is not None:
+            message_id = message.id
+
+    if message_id is None and receipt.whatsapp_message_id is None:
         return
     crud.create_message_receipt(
         db,
         status=status_value,
-        whatsapp_message_id=receipt.whatsapp_message_id,
+        message_id=message_id,
+        whatsapp_message_id=receipt.whatsapp_message_id if message_id is None else None,
         payload_raw=json.dumps(receipt.payload, ensure_ascii=True),
     )
 
