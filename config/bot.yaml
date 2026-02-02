@@ -1,0 +1,332 @@
+root: '2'
+invalid_input_text: Opción inválida. Respondé con un número del menú.
+timezone: America/Argentina/Buenos_Aires
+handoff_schedule:
+  windows:
+  - days:
+    - mon
+    - tue
+    - wed
+    - thu
+    - fri
+    start: '09:00'
+    end: '18:00'
+  closed_dates: []
+  closed_ranges: []
+nodes:
+  '2':
+    on_enter_text: 'Hola! soy EVA, Asistente Virtual de la DAS. Seleccione por favor una de las siguientes opciones ingresando solamente un número:
+
+
+      1. Urgencias y emergencias
+
+      2. Trámites
+
+      3. Consultas
+
+      4. Centro DAS
+
+      5. Cartillas
+
+      6. Contactarse con un/a operador/a
+
+      7. Salir'
+    options:
+    - key: '1'
+      label: Urgencias y emergencias
+      next: '8'
+    - key: '2'
+      label: Trámites
+      next: '9'
+    - key: '3'
+      label: Consultas
+      next: '15'
+    - key: '4'
+      label: Centro DAS
+      next: '17'
+    - key: '5'
+      label: Cartillas
+      next: '19'
+    - key: '6'
+      label: Contactarse con un/a operador/a
+      action: handoff
+    - key: '7'
+      label: Salir
+      next: '3'
+  '3':
+    on_enter_text: Gracias por haberte comunicado con la DAS. Espero haberte sido útil.
+      ¡Hasta la próxima!
+    terminal_text: Gracias por haberte comunicado con la DAS. Espero haberte sido útil.
+      ¡Hasta la próxima!
+    options: []
+  '8':
+    on_enter_text: "URGENCIAS Y EMERGENCIAS:\n- 0810-999-3876 (INT.1) \n- Línea Auxiliar:\
+      \ (011) 5289-8110\n\n- Emergencias psiquiátricas:\nComunicarse al 0800-222-3566\
+      \ \n\n- Odontología\nClínica ODEM Central: 4372-2508 / 1113 (CABA y GBA).\nLavalle\
+      \ 1718. CABA.\nInterior del país: 0810-333-6847.\n\n- Sepelios\nEl surco Compañía\
+      \ de Seguros: 0-800-666-1575 /\_0800-345-1259\_ /\_ (11)\n7700-3087\n\n1. Volver\
+      \ atrás\n2. Finalizar"
+    options:
+    - key: '1'
+      label: Volver atrás
+      next: '2'
+    - key: '2'
+      label: Finalizar
+      next: '3'
+  '9':
+    on_enter_text: "TRÁMITES:\n\n1. Autorizaciones\n2. Solicitud de recetas\n3. Credencial\n\
+      4. Solicitud HC\n5. Comunicarse con un operador\n6. Volver atrás"
+    options:
+    - key: '1'
+      label: Autorizaciones
+      next: '10'
+    - key: '2'
+      label: Solicitud de recetas
+      next: '11'
+    - key: '3'
+      label: Credencial
+      next: '12'
+    - key: '4'
+      label: Solicitud HC
+      next: '13'
+    - key: '5'
+      label: Comunicarse con un operador
+      action: handoff
+    - key: '6'
+      label: Volver atrás
+      next: '2'
+  '10':
+    on_enter_text: "Para las Autorizaciones se necesita:\n\n- Orden médica debe estar\
+      \ confeccionada y firmada por un médico convenido\n- Solicitada para un prestador\
+      \ de la red\n- Contar con el Nro. de socio OMINT y CUIL\n- Las órdenes médicas\
+      \ tienen validez de 60 días.\n\n1. Comunicarse con un Operador\n2. Volver atrás\n\
+      3. Finalizar"
+    options:
+    - key: '1'
+      label: Comunicarse con un Operador
+      action: handoff
+    - key: '2'
+      label: Volver atrás
+      next: '9'
+    - key: '3'
+      label: Finalizar
+      next: '3'
+  '11':
+    on_enter_text: "SOLICITUD DE RECETAS:\n\n- Recuerde que para poder acceder a este\
+      \ servicio debe contar con historia clínica actualizada en DAS.\n\nPuede solicitarlas\
+      \ ingresando a nuestros portal de autogestión con sus datos personales, opción\
+      \ recetas.\n\nhttps://portal.das.gob.ar/ \n\n1. Volver atrás\n2. Finalizar"
+    options:
+    - key: '1'
+      label: Volver atrás
+      next: '9'
+    - key: '2'
+      label: Finalizar
+      next: '3'
+  '12':
+    on_enter_text: "SOLICITUD REIMPRESIÓN DE CREDENCIAL\n\n- Para gestionar el tramite\
+      \ seleccionado ingresar al portal del afiliado:\nhttp://portal.das.gob.ar\n\n\
+      1. Volver Atrás\n2. Finalizar"
+    options:
+    - key: '1'
+      label: Volver Atrás
+      next: '9'
+    - key: '2'
+      label: Finalizar
+      next: '3'
+  '13':
+    on_enter_text: "SOLICITUD DE HISTORIA CLÍNICA\n\n- Para gestionar el tramite seleccionado\
+      \ ingresar al portal del afiliado:\nhttp://portal.das.gob.ar\n\n1. Volver Atrás\n\
+      2. Finalizar"
+    options:
+    - key: '1'
+      label: Volver Atrás
+      next: '9'
+    - key: '2'
+      label: Finalizar
+      next: '3'
+  '15':
+    on_enter_text: "1. Coberturas\n2. Volver Atrás\n3. Finalizar"
+    options:
+    - key: '1'
+      label: Coberturas
+      next: '16'
+    - key: '2'
+      label: Volver Atrás
+      next: '2'
+    - key: '3'
+      label: Finalizar
+      next: '3'
+  '16':
+    on_enter_text: "- Para acceder a la información de las coberturas y los formularios\n\
+      ofrecidas por la DAS ingrese al siguiente link:\nhttps://das.gob.ar/cartilla/#prog-asist\
+      \ \n\n1. Comunicarse con un Operador\n2. Volver Atrás\n3. Finalizar"
+    options:
+    - key: '1'
+      label: Comunicarse con un Operador
+      action: handoff
+    - key: '2'
+      label: Volver Atrás
+      next: '15'
+    - key: '3'
+      label: Finalizar
+      next: '3'
+  '17':
+    on_enter_text: "1. Programa Ginecológico\n2. Servicio Odontológico\n3. Programa\
+      \ Chequeo Anual\n4. Programa Odontopediatria\n5. Vacunatorio\n6. Volver Atrás\n\
+      7. Finalizar"
+    options:
+    - key: '1'
+      label: Programa Ginecológico
+      next: '18'
+    - key: '2'
+      label: Servicio Odontológico
+      next: '18'
+    - key: '3'
+      label: Programa Chequeo Anual
+      next: '18'
+    - key: '4'
+      label: Programa Odontopediatria
+      next: '18'
+    - key: '6'
+      label: Volver Atrás
+      next: '2'
+    - key: '7'
+      label: Finalizar
+      next: '3'
+    - key: '5'
+      label: Vacunatorio
+      next: '22'
+  '18':
+    on_enter_text: "Para solicitar un turno deberá realizarlo a través del portal:\n\
+      https://portal.das.gob.ar/\no comunicarse al 0810-222-0317 o vía email contacto@das.gob.ar\n\
+      \n1. Volver Atrás\n2. Finalizar"
+    options:
+    - key: '1'
+      label: Volver Atrás
+      next: '17'
+    - key: '2'
+      label: Finalizar
+      next: '3'
+  '19':
+    on_enter_text: "1. Farmacias\n2. Prestadores\n3. Volver Atrás"
+    options:
+    - key: '1'
+      label: Farmacias
+      next: '40'
+    - key: '2'
+      label: Prestadores
+      next: '21'
+    - key: '3'
+      label: Volver Atrás
+      next: '2'
+  '21':
+    on_enter_text: "Para ingresar al listado de prestadores dirigirse al siguiente link:\n\
+      https://das.gob.ar/cartilla/\n\n1. Volver Atrás\n2. Finalizar"
+    options:
+    - key: '1'
+      label: Volver Atrás
+      next: '19'
+    - key: '2'
+      label: Finalizar
+      next: '3'
+  '22':
+    on_enter_text: "Vacunatario la atención es con demanda espontanea  \nMAYORES: Lunes\
+      \ a Jueves de 10.00 a 16.00 HS.-\nPEDIÁTRICO    Viernes de 10.00 a 16.00 HS.-\
+      \ \n\n1. Volver Atrás\n2. Finalizar"
+    options:
+    - key: '1'
+      label: Volver Atrás
+      next: '2'
+    - key: '2'
+      label: Finalizar
+      next: '3'
+  '23':
+    on_enter_text: "Para ingresar al listado de farmacias dirigirse al siguiente link:\
+      \ https://das.gob.ar/farmacias-zona-caba/ \n\n1. Volver Atrás\n2. Finalizar"
+    options:
+    - key: '1'
+      label: Volver Atrás
+      next: '40'
+    - key: '2'
+      label: Finalizar
+      next: '3'
+  '40':
+    on_enter_text: "Para ingresar al listado de las farmacias convenidas, indique su\
+      \ zona preferencia:\n\n1) CABA\n2) ZONA SUR\n3) ZONA NORTE\n4) ZONA OESTE\n5) INTERIOR\n\
+      6) TODAS\n7) Volver atrás\n8) Finalizar"
+    options:
+    - key: '1'
+      label: CABA
+      next: '23'
+    - key: '2'
+      label: ZONA SUR
+      next: '55'
+    - key: '3'
+      label: ZONA NORTE
+      next: '56'
+    - key: '4'
+      label: ZONA OESTE
+      next: '58'
+    - key: '5'
+      label: INTERIOR
+      next: '59'
+    - key: '6'
+      label: TODAS
+      next: '57'
+    - key: '7'
+      label: Volver atrás
+      next: '19'
+    - key: '8'
+      label: Finalizar
+      next: '3'
+  '55':
+    on_enter_text: "Para ingresar al listado de farmacias dirigirse al siguiente link:\n\
+      https://das.gob.ar/farmacias-zona-sur/\n\n1. Volver Atrás\n2. Finalizar"
+    options:
+    - key: '1'
+      label: Volver Atrás
+      next: '40'
+    - key: '2'
+      label: Finalizar
+      next: '3'
+  '56':
+    on_enter_text: "Para ingresar al listado de farmacias dirigirse al siguiente link:\n\
+      https://das.gob.ar/farmacias-zona-norte/\n\n1. Volver Atrás\n2. Finalizar"
+    options:
+    - key: '1'
+      label: Volver Atrás
+      next: '40'
+    - key: '2'
+      label: Finalizar
+      next: '3'
+  '57':
+    on_enter_text: "Para ingresar al listado de farmacias dirigirse al siguiente link:\n\
+      https://das.gob.ar/farmacias/\n\n1. Volver Atrás\n2. Finalizar"
+    options:
+    - key: '1'
+      label: Volver Atrás
+      next: '40'
+    - key: '2'
+      label: Finalizar
+      next: '3'
+  '58':
+    on_enter_text: "Para ingresar al listado de farmacias dirigirse al siguiente link:\n\
+      https://das.gob.ar/farmacias-zona-oeste/\n\n1. Volver Atrás\n2. Finalizar"
+    options:
+    - key: '1'
+      label: Volver Atrás
+      next: '40'
+    - key: '2'
+      label: Finalizar
+      next: '3'
+  '59':
+    on_enter_text: "Para ingresar al listado de farmacias dirigirse al siguiente link:\n\
+      https://das.gob.ar/farmacias-zona-interior/\n\n1. Volver Atrás\n2. Finalizar"
+    options:
+    - key: '1'
+      label: Volver Atrás
+      next: '40'
+    - key: '2'
+      label: Finalizar
+      next: '3'
