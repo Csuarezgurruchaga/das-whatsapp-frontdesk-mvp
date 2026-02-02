@@ -16,6 +16,8 @@ from .models import (
     MessageReceipt,
     MessageReceiptStatus,
     SenderType,
+    User,
+    UserSession,
 )
 
 
@@ -104,11 +106,17 @@ def append_message(
 def create_conversation_event(
     session: Session,
     *,
-    conversation_id: int,
+    conversation_id: int | None,
     event_type: ConversationEventType,
     actor_user_id: int | None = None,
     meta_json: str | None = None,
 ) -> ConversationEvent:
+    if conversation_id is None and event_type not in {
+        ConversationEventType.LOGIN_SUCCESS,
+        ConversationEventType.LOGIN_FAIL,
+    }:
+        raise ValueError("conversation_id is required for non-login events")
+
     event = ConversationEvent(
         conversation_id=conversation_id,
         type=event_type,
@@ -190,6 +198,50 @@ def list_message_receipts_by_whatsapp_message_id(
         .offset(offset)
     )
     return list(session.scalars(stmt))
+
+
+def get_user_by_username(session: Session, *, username: str) -> User | None:
+    stmt = select(User).where(User.username == username)
+    return session.scalar(stmt)
+
+
+def get_user(session: Session, user_id: int) -> User | None:
+    return session.get(User, user_id)
+
+
+def create_user_session(
+    session: Session,
+    *,
+    session_id: str,
+    user_id: int,
+    expires_at: datetime,
+) -> UserSession:
+    user_session = UserSession(
+        session_id=session_id,
+        user_id=user_id,
+        expires_at=expires_at,
+    )
+    session.add(user_session)
+    return user_session
+
+
+def get_user_session_by_session_id(
+    session: Session,
+    *,
+    session_id: str,
+) -> UserSession | None:
+    stmt = select(UserSession).where(UserSession.session_id == session_id)
+    return session.scalar(stmt)
+
+
+def revoke_user_session(
+    session: Session,
+    user_session: UserSession,
+    *,
+    revoked_at: datetime | None = None,
+) -> UserSession:
+    user_session.revoked_at = revoked_at or datetime.now(timezone.utc)
+    return user_session
 
 
 def upsert_read_state(

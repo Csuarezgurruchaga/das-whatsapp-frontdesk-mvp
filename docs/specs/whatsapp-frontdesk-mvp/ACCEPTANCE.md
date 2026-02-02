@@ -43,6 +43,7 @@ Saludos”
 - Idempotency: duplicate webhook deliveries do not create duplicate inbound messages (dedupe by `whatsapp_message_id`).
 - Audit baseline:
   - Critical events are persisted (`TAKEN`, `REASSIGNED`, `CLOSED`, `MESSAGE_SENT_FAILED`, `LOGIN_SUCCESS`, `LOGIN_FAIL`).
+  - `LOGIN_SUCCESS` / `LOGIN_FAIL` may be stored without a `conversation_id`.
   - WhatsApp receipts are persisted for audit-only (`sent`, `delivered`, `read`, `failed`) without UI requirements.
 
 ## Scope note

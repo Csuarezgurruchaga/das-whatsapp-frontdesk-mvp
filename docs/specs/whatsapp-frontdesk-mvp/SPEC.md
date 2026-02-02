@@ -138,8 +138,9 @@ Handoff is represented as an explicit option in a menu (not an automatic termina
 - **MessageReceipt** (audit-only):
   - `id`, `message_id` (or `whatsapp_message_id`), `status` (`sent` | `delivered` | `read` | `failed`), `payload_raw?`, `created_at`.
 - **ConversationEvent** (critical audit events):
-  - `id`, `conversation_id`, `type` (`TAKEN` | `REASSIGNED` | `CLOSED` | `MESSAGE_SENT_FAILED` | `LOGIN_SUCCESS` | `LOGIN_FAIL`),
+  - `id`, `conversation_id?`, `type` (`TAKEN` | `REASSIGNED` | `CLOSED` | `MESSAGE_SENT_FAILED` | `LOGIN_SUCCESS` | `LOGIN_FAIL`),
   - `actor_user_id?`, `meta_json?`, `created_at`.
+  - `conversation_id` is nullable only for `LOGIN_SUCCESS` / `LOGIN_FAIL` events.
 - **ConversationReadState** (or equivalent): per-user last seen marker/unread count model (MVP: mark conversation as “read” when the user opens it).
 
 ### External interfaces
@@ -238,6 +239,11 @@ None.
 - 2026-01-29 — **Decision:** WebSockets exclude typing/presence in MVP.
   - **Rationale:** user deferred typing/presence; keep realtime scope minimal.
 - 2026-01-29 — **Decision:** In YAML flows, handoff is represented as an explicit menu option (not an automatic terminal action).
+
+## Changelog
+- 2026-02-02 — Allow login audit events without `conversation_id`.
+  - reason: login events are not tied to a conversation.
+  - impact: SPEC data model clarified; ACCEPTANCE A7 updated; TASKS T1.3 clarified.
   - **Rationale:** aligns with “offer handoff at the end of some flows” while keeping the user in control.
 - 2026-01-29 — **Decision:** YAML lives on disk and is configured by path from environment/config.
   - **Rationale:** fits on-prem operation patterns and allows editing without rebuilding images.

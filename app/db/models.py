@@ -68,6 +68,29 @@ class User(Base):
     )
     disabled_at: Mapped[object | None] = mapped_column(DateTime(timezone=True))
 
+    sessions = relationship("UserSession", back_populates="user")
+
+
+class UserSession(Base):
+    __tablename__ = "user_sessions"
+    __table_args__ = (
+        UniqueConstraint("session_id", name="uq_user_sessions_session_id"),
+        Index("ix_user_sessions_session_id", "session_id"),
+        Index("ix_user_sessions_user_id", "user_id"),
+        Index("ix_user_sessions_expires_at", "expires_at"),
+    )
+
+    id: Mapped[int] = mapped_column(BigInteger, primary_key=True)
+    session_id: Mapped[str] = mapped_column(String(128), nullable=False)
+    user_id: Mapped[int] = mapped_column(ForeignKey("users.id"), nullable=False)
+    created_at: Mapped[object] = mapped_column(
+        DateTime(timezone=True), server_default=func.now(), nullable=False
+    )
+    expires_at: Mapped[object] = mapped_column(DateTime(timezone=True), nullable=False)
+    revoked_at: Mapped[object | None] = mapped_column(DateTime(timezone=True))
+
+    user = relationship("User", back_populates="sessions")
+
 
 class Contact(Base):
     __tablename__ = "contacts"
@@ -155,9 +178,7 @@ class ConversationEvent(Base):
     )
 
     id: Mapped[int] = mapped_column(BigInteger, primary_key=True)
-    conversation_id: Mapped[int] = mapped_column(
-        ForeignKey("conversations.id"), nullable=False
-    )
+    conversation_id: Mapped[int | None] = mapped_column(ForeignKey("conversations.id"))
     type: Mapped[ConversationEventType] = mapped_column(
         Enum(ConversationEventType, name="conversation_event_type"), nullable=False
     )

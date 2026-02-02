@@ -58,6 +58,7 @@
     - Implement session creation and secure cookie settings per environment.
     - Enforce that agents can only reply to conversations assigned to them.
     - Enforce that admins can reply only after assigning the conversation to themselves.
+    - Allow `LOGIN_SUCCESS` / `LOGIN_FAIL` audit events without a `conversation_id`.
   - Done condition: Unauthorized access is blocked and audited.
   - Depends on: [T1.1, T1.2]
   - Risks: Session fixation/cookie misconfiguration; authorization gaps.

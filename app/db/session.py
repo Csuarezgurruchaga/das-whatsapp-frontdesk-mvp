@@ -11,8 +11,14 @@ def get_database_url() -> str:
     return url
 
 
+_engine = None
+
+
 def get_engine():
-    return create_engine(get_database_url(), pool_pre_ping=True, future=True)
+    global _engine
+    if _engine is None:
+        _engine = create_engine(get_database_url(), pool_pre_ping=True, future=True)
+    return _engine
 
 
 SessionLocal = sessionmaker(class_=Session, autoflush=False, autocommit=False, expire_on_commit=False)
