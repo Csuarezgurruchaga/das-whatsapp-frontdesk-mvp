@@ -10,10 +10,16 @@ Last updated: 2026-02-02
 - T1.3 session auth (login/logout) + authorization guards + sessions table
 - T1.4 handoff state transitions (take/reassign/close) + audit events
 - T1.5 YAML bot loader/validator + routing + admin reload endpoint + EN_ESPERA auto-replies
+- T2.1 WhatsApp inbound webhook (verify + signature + idempotency) + inbound routing + receipt persistence (flush bot history for batched payloads)
 
 ## Current / Next
-- Next task: T2.1 WhatsApp inbound webhook (verify + signature + idempotency)
+- Next task: T2.2 WhatsApp outbound send (text) + receipt lifecycle
 - Status: READY
+
+## How to verify
+- Send GET ` /webhooks/whatsapp?hub.mode=subscribe&hub.verify_token=<token>&hub.challenge=123` with `WHATSAPP_VERIFY_TOKEN` set; expect `123`.
+- POST a WhatsApp webhook payload with a valid signature; expect 200 and inbound messages persisted (dedupe by `whatsapp_message_id`).
+- POST the same payload again; expect no duplicate inbound messages.
 
 ## Important constraints
 - Implement only tasks defined in docs/specs/whatsapp-frontdesk-mvp/TASKS.md (1–2 per chunk).
@@ -29,4 +35,4 @@ Last updated: 2026-02-02
 
 ## Safe resume instructions
 - Stay on impl/whatsapp-frontdesk-mvp branch.
-- Start with T2.1 by implementing WhatsApp inbound webhook verification + signature + idempotency.
+- Continue with T2.2 by implementing WhatsApp outbound send (text) and receipt lifecycle persistence.

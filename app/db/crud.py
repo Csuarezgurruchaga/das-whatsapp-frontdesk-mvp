@@ -2,10 +2,11 @@ from __future__ import annotations
 
 from datetime import datetime, timezone
 
-from sqlalchemy import select
+from sqlalchemy import select, update
 from sqlalchemy.orm import Session
 
 from .models import (
+    Contact,
     Conversation,
     ConversationReadState,
     ConversationState,
@@ -39,6 +40,39 @@ def create_conversation(
     return conversation
 
 
+def update_conversation_state(
+    session: Session,
+    *,
+    conversation_id: int,
+    state: ConversationState,
+    assigned_to: int | None,
+    now: datetime,
+) -> None:
+    stmt = (
+        update(Conversation)
+        .where(Conversation.id == conversation_id)
+        .values(
+            state=state,
+            assigned_to=assigned_to,
+            last_activity_at=now,
+            updated_at=now,
+        )
+    )
+    session.execute(stmt)
+
+
+def touch_conversation(session: Session, *, conversation_id: int, now: datetime) -> None:
+    stmt = (
+        update(Conversation)
+        .where(Conversation.id == conversation_id)
+        .values(
+            last_activity_at=now,
+            updated_at=now,
+        )
+    )
+    session.execute(stmt)
+
+
 def get_conversation(session: Session, conversation_id: int) -> Conversation | None:
     return session.get(Conversation, conversation_id)
 
@@ -58,6 +92,20 @@ def list_conversations_by_state(
         .offset(offset)
     )
     return list(session.scalars(stmt))
+
+
+def get_latest_conversation_for_contact(
+    session: Session,
+    *,
+    contact_id: int,
+) -> Conversation | None:
+    stmt = (
+        select(Conversation)
+        .where(Conversation.contact_id == contact_id)
+        .order_by(Conversation.last_activity_at.desc())
+        .limit(1)
+    )
+    return session.scalar(stmt)
 
 
 def update_conversation(
@@ -83,6 +131,29 @@ def update_conversation(
     return conversation
 
 
+def get_contact_by_whatsapp_number(
+    session: Session,
+    *,
+    whatsapp_number: str,
+) -> Contact | None:
+    stmt = select(Contact).where(Contact.whatsapp_number == whatsapp_number)
+    return session.scalar(stmt)
+
+
+def create_contact(
+    session: Session,
+    *,
+    whatsapp_number: str,
+    display_name: str | None = None,
+) -> Contact:
+    contact = Contact(
+        whatsapp_number=whatsapp_number,
+        display_name=display_name,
+    )
+    session.add(contact)
+    return contact
+
+
 def append_message(
     session: Session,
     *,
@@ -101,6 +172,56 @@ def append_message(
     )
     session.add(message)
     return message
+
+
+def get_message_by_whatsapp_message_id(
+    session: Session,
+    *,
+    whatsapp_message_id: str,
+) -> Message | None:
+    stmt = (
+        select(Message)
+        .where(Message.whatsapp_message_id == whatsapp_message_id)
+        .order_by(Message.created_at.desc())
+        .limit(1)
+    )
+    return session.scalar(stmt)
+
+
+def list_bot_message_texts(
+    session: Session,
+    *,
+    conversation_id: int,
+) -> list[str]:
+    session.flush()
+    stmt = (
+        select(Message.text)
+        .where(
+            Message.conversation_id == conversation_id,
+            Message.sender_type == SenderType.BOT,
+        )
+        .order_by(Message.created_at.asc())
+    )
+    return [text for text in session.scalars(stmt) if text]
+
+
+def get_last_bot_message_text(
+    session: Session,
+    *,
+    conversation_id: int,
+) -> str | None:
+    session.flush()
+    stmt = (
+        select(Message.text)
+        .where(
+            Message.conversation_id == conversation_id,
+            Message.sender_type == SenderType.BOT,
+            Message.direction == MessageDirection.OUTBOUND,
+        )
+        .order_by(Message.created_at.desc())
+        .limit(1)
+    )
+    return session.scalar(stmt)
 
 
 def create_conversation_event(
