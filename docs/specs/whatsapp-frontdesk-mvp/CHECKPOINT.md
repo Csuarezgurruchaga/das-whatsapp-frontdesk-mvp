@@ -9,9 +9,10 @@ Last updated: 2026-02-02
 - T1.2 audit events + message receipts tables and CRUD helpers
 - T1.3 session auth (login/logout) + authorization guards + sessions table
 - T1.4 handoff state transitions (take/reassign/close) + audit events
+- T1.5 YAML bot loader/validator + routing + admin reload endpoint + EN_ESPERA auto-replies
 
 ## Current / Next
-- Next task: T1.5 bot engine (YAML-driven) + EN_ESPERA auto-messages
+- Next task: T2.1 WhatsApp inbound webhook (verify + signature + idempotency)
 - Status: READY
 
 ## Important constraints
@@ -24,7 +25,8 @@ Last updated: 2026-02-02
 ## Gotchas / Risks discovered
 - Required WhatsApp credentials have no defaults; ensure they are set in non-dev environments.
 - Login audit events have no conversation_id; table allows NULL only for login events.
+- Bot menu reload keeps last-known-good config; invalid YAML returns errors without swapping config.
 
 ## Safe resume instructions
 - Stay on impl/whatsapp-frontdesk-mvp branch.
-- Start with T1.5 by implementing the YAML bot engine and EN_ESPERA auto-messages.
+- Start with T2.1 by implementing WhatsApp inbound webhook verification + signature + idempotency.
