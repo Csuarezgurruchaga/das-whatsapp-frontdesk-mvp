@@ -5,9 +5,10 @@ Last updated: 2026-02-02
 ## Completed
 - T0.1 documented config conventions (env vars + reverse proxy + webhook URL)
 - T0.2 validated bot.yaml and added local config artifact
+- T1.1 core data model + Alembic baseline migration + CRUD access layer
 
 ## Current / Next
-- Next task: T1.1 data model for conversations/messages/read state
+- Next task: T1.2 critical audit events + WhatsApp receipts persistence
 - Status: READY
 
 ## Important constraints
@@ -20,4 +21,4 @@ Last updated: 2026-02-02
 
 ## Safe resume instructions
 - Stay on impl/whatsapp-frontdesk-mvp branch.
-- Start with T1.1 by defining the data model and persistence layer for conversations/messages/read state.
+- Start with T1.2 by adding audit/receipt tables and write paths.
