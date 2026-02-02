@@ -8,9 +8,10 @@ Last updated: 2026-02-02
 - T1.1 core data model + Alembic baseline migration + CRUD access layer
 - T1.2 audit events + message receipts tables and CRUD helpers
 - T1.3 session auth (login/logout) + authorization guards + sessions table
+- T1.4 handoff state transitions (take/reassign/close) + audit events
 
 ## Current / Next
-- Next task: T1.4 handoff state transitions (take/reassign/close)
+- Next task: T1.5 bot engine (YAML-driven) + EN_ESPERA auto-messages
 - Status: READY
 
 ## Important constraints
@@ -24,4 +25,4 @@ Last updated: 2026-02-02
 
 ## Safe resume instructions
 - Stay on impl/whatsapp-frontdesk-mvp branch.
-- Start with T1.4 by implementing atomic take/reassign/close and audit events.
+- Start with T1.5 by implementing the YAML bot engine and EN_ESPERA auto-messages.
