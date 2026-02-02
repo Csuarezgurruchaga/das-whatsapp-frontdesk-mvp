@@ -4,9 +4,10 @@ Last updated: 2026-02-02
 
 ## Completed
 - T0.1 documented config conventions (env vars + reverse proxy + webhook URL)
+- T0.2 validated bot.yaml and added local config artifact
 
 ## Current / Next
-- Next task: T0.2 collect initial bot.yaml (approved copy)
+- Next task: T1.1 data model for conversations/messages/read state
 - Status: READY
 
 ## Important constraints
@@ -19,4 +20,4 @@ Last updated: 2026-02-02
 
 ## Safe resume instructions
 - Stay on impl/whatsapp-frontdesk-mvp branch.
-- Start with T0.2 by obtaining and validating the initial bot.yaml content artifact.
+- Start with T1.1 by defining the data model and persistence layer for conversations/messages/read state.
