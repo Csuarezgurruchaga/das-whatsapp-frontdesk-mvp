@@ -9,8 +9,12 @@ from .models import (
     Conversation,
     ConversationReadState,
     ConversationState,
+    ConversationEvent,
+    ConversationEventType,
     Message,
     MessageDirection,
+    MessageReceipt,
+    MessageReceiptStatus,
     SenderType,
 )
 
@@ -95,6 +99,97 @@ def append_message(
     )
     session.add(message)
     return message
+
+
+def create_conversation_event(
+    session: Session,
+    *,
+    conversation_id: int,
+    event_type: ConversationEventType,
+    actor_user_id: int | None = None,
+    meta_json: str | None = None,
+) -> ConversationEvent:
+    event = ConversationEvent(
+        conversation_id=conversation_id,
+        type=event_type,
+        actor_user_id=actor_user_id,
+        meta_json=meta_json,
+    )
+    session.add(event)
+    return event
+
+
+def list_conversation_events(
+    session: Session,
+    *,
+    conversation_id: int,
+    limit: int = 100,
+    offset: int = 0,
+) -> list[ConversationEvent]:
+    stmt = (
+        select(ConversationEvent)
+        .where(ConversationEvent.conversation_id == conversation_id)
+        .order_by(ConversationEvent.created_at.desc())
+        .limit(limit)
+        .offset(offset)
+    )
+    return list(session.scalars(stmt))
+
+
+def create_message_receipt(
+    session: Session,
+    *,
+    status: MessageReceiptStatus,
+    message_id: int | None = None,
+    whatsapp_message_id: str | None = None,
+    payload_raw: str | None = None,
+) -> MessageReceipt:
+    if message_id is None and whatsapp_message_id is None:
+        raise ValueError("message_id or whatsapp_message_id is required")
+
+    receipt = MessageReceipt(
+        message_id=message_id,
+        whatsapp_message_id=whatsapp_message_id,
+        status=status,
+        payload_raw=payload_raw,
+    )
+    session.add(receipt)
+    return receipt
+
+
+def list_message_receipts_by_conversation(
+    session: Session,
+    *,
+    conversation_id: int,
+    limit: int = 200,
+    offset: int = 0,
+) -> list[MessageReceipt]:
+    stmt = (
+        select(MessageReceipt)
+        .join(Message, MessageReceipt.message_id == Message.id)
+        .where(Message.conversation_id == conversation_id)
+        .order_by(MessageReceipt.created_at.desc())
+        .limit(limit)
+        .offset(offset)
+    )
+    return list(session.scalars(stmt))
+
+
+def list_message_receipts_by_whatsapp_message_id(
+    session: Session,
+    *,
+    whatsapp_message_id: str,
+    limit: int = 200,
+    offset: int = 0,
+) -> list[MessageReceipt]:
+    stmt = (
+        select(MessageReceipt)
+        .where(MessageReceipt.whatsapp_message_id == whatsapp_message_id)
+        .order_by(MessageReceipt.created_at.desc())
+        .limit(limit)
+        .offset(offset)
+    )
+    return list(session.scalars(stmt))
 
 
 def upsert_read_state(

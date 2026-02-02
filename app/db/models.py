@@ -40,6 +40,22 @@ class SenderType(enum.Enum):
     AGENT = "AGENT"
 
 
+class ConversationEventType(enum.Enum):
+    TAKEN = "TAKEN"
+    REASSIGNED = "REASSIGNED"
+    CLOSED = "CLOSED"
+    MESSAGE_SENT_FAILED = "MESSAGE_SENT_FAILED"
+    LOGIN_SUCCESS = "LOGIN_SUCCESS"
+    LOGIN_FAIL = "LOGIN_FAIL"
+
+
+class MessageReceiptStatus(enum.Enum):
+    SENT = "sent"
+    DELIVERED = "delivered"
+    READ = "read"
+    FAILED = "failed"
+
+
 class User(Base):
     __tablename__ = "users"
 
@@ -129,6 +145,56 @@ class Message(Base):
     )
 
     conversation = relationship("Conversation")
+
+
+class ConversationEvent(Base):
+    __tablename__ = "conversation_events"
+    __table_args__ = (
+        Index("ix_conversation_events_conversation_id", "conversation_id"),
+        Index("ix_conversation_events_created_at", "created_at"),
+    )
+
+    id: Mapped[int] = mapped_column(BigInteger, primary_key=True)
+    conversation_id: Mapped[int] = mapped_column(
+        ForeignKey("conversations.id"), nullable=False
+    )
+    type: Mapped[ConversationEventType] = mapped_column(
+        Enum(ConversationEventType, name="conversation_event_type"), nullable=False
+    )
+    actor_user_id: Mapped[int | None] = mapped_column(ForeignKey("users.id"))
+    meta_json: Mapped[str | None] = mapped_column(Text)
+    created_at: Mapped[object] = mapped_column(
+        DateTime(timezone=True), server_default=func.now(), nullable=False
+    )
+
+    conversation = relationship("Conversation")
+    actor_user = relationship("User")
+
+
+class MessageReceipt(Base):
+    __tablename__ = "message_receipts"
+    __table_args__ = (
+        CheckConstraint(
+            "message_id IS NOT NULL OR whatsapp_message_id IS NOT NULL",
+            name="ck_message_receipts_message_or_whatsapp_id",
+        ),
+        Index("ix_message_receipts_message_id", "message_id"),
+        Index("ix_message_receipts_whatsapp_message_id", "whatsapp_message_id"),
+        Index("ix_message_receipts_created_at", "created_at"),
+    )
+
+    id: Mapped[int] = mapped_column(BigInteger, primary_key=True)
+    message_id: Mapped[int | None] = mapped_column(ForeignKey("messages.id"))
+    whatsapp_message_id: Mapped[str | None] = mapped_column(String(255))
+    status: Mapped[MessageReceiptStatus] = mapped_column(
+        Enum(MessageReceiptStatus, name="message_receipt_status"), nullable=False
+    )
+    payload_raw: Mapped[str | None] = mapped_column(Text)
+    created_at: Mapped[object] = mapped_column(
+        DateTime(timezone=True), server_default=func.now(), nullable=False
+    )
+
+    message = relationship("Message")
 
 
 class ConversationReadState(Base):
