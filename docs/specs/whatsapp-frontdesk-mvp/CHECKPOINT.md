@@ -3,13 +3,14 @@
 Last updated: 2026-02-03
 
 ## Completed
-- T0.1 config conventions; T0.2 bot.yaml validated; T1.1–T1.5 core data/auth/bot; T2.1 inbound webhook; T2.2 outbound send + receipts; T2.3 realtime WS events
+- T0.1 config conventions; T0.2 bot.yaml validated; T1.1–T1.5 core data/auth/bot; T2.1 inbound webhook; T2.2 outbound send + receipts; T2.3 realtime WS events; T3.1 FrontDesk UI
 
 ## Current / Next
-- Next task: T3.1 FrontDesk UI (3 tabs + 3-column layout + core actions)
+- Next task: T3.2 Deployment hardening (reverse proxy + allowlist toggle + config validation)
 - Status: READY
 
 ## How to verify
+- Load `/` in a browser; login; verify tabs, take, send, close, and admin reassign/assign-to-self flows.
 - Open `/realtime/ws` with a valid session cookie; trigger take/reassign/close or send/receive and observe `conversation.updated` + `message.new` payloads.
 
 ## Important constraints
