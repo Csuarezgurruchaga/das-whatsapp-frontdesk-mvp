@@ -9,9 +9,9 @@ from pydantic import BaseModel
 from sqlalchemy.orm import Session
 from sqlalchemy.exc import IntegrityError
 
-from app.api.deps import get_db, get_current_user
+from app.api.deps import get_db, get_current_user, require_roles
 from app.db import crud
-from app.db.models import ConversationEventType, User
+from app.db.models import ConversationEventType, User, UserRole
 from app.security import (
     SESSION_COOKIE_NAME,
     decode_session_cookie,
@@ -30,6 +30,12 @@ class LoginRequest(BaseModel):
 
 
 class LoginResponse(BaseModel):
+    user_id: int
+    username: str
+    role: str
+
+
+class UserSummary(BaseModel):
     user_id: int
     username: str
     role: str
@@ -102,6 +108,33 @@ def login(payload: LoginRequest, response: Response, db: Session = Depends(get_d
     )
 
     return LoginResponse(user_id=user.id, username=user.username, role=user.role.value)
+
+
+@router.get("/me", response_model=LoginResponse)
+def me(current_user: User = Depends(get_current_user)) -> LoginResponse:
+    return LoginResponse(
+        user_id=current_user.id,
+        username=current_user.username,
+        role=current_user.role.value,
+    )
+
+
+@router.get("/users", response_model=list[UserSummary])
+def list_users(
+    role: str = "agent",
+    current_user: User = Depends(require_roles(UserRole.ADMIN)),
+    db: Session = Depends(get_db),
+) -> list[UserSummary]:
+    try:
+        role_enum = UserRole(role)
+    except ValueError as exc:
+        raise HTTPException(status_code=status.HTTP_400_BAD_REQUEST, detail="Invalid role") from exc
+
+    users = crud.list_users_by_role(db, role=role_enum)
+    return [
+        UserSummary(user_id=user.id, username=user.username, role=user.role.value)
+        for user in users
+    ]
 
 
 @router.post("/logout")

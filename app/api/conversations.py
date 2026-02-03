@@ -2,13 +2,14 @@ from __future__ import annotations
 
 from datetime import datetime, timezone
 
-from fastapi import APIRouter, Depends, HTTPException, status
+from fastapi import APIRouter, Depends, HTTPException, Query, status
 from pydantic import BaseModel
 from sqlalchemy import update
 from sqlalchemy.orm import Session
 
 from app.api.deps import (
     ensure_can_respond_conversation,
+    ensure_can_view_conversation,
     get_current_user,
     get_db,
     require_roles,
@@ -42,6 +43,38 @@ class ConversationActionResponse(BaseModel):
     assigned_to: int | None = None
 
 
+class ConversationSummary(BaseModel):
+    conversation_id: int
+    state: str
+    assigned_to: int | None
+    contact_number: str
+    contact_name: str | None
+    last_activity_at: datetime | None
+    last_message_text: str | None
+    unread_count: int
+
+
+class ConversationDetail(BaseModel):
+    conversation_id: int
+    state: str
+    assigned_to: int | None
+    assigned_to_username: str | None
+    contact_number: str
+    contact_name: str | None
+    last_activity_at: datetime | None
+    closed_at: datetime | None
+    closed_by: int | None
+    previous_conversation_id: int | None
+
+
+class MessageOut(BaseModel):
+    message_id: int
+    direction: str
+    sender_type: str
+    text: str | None
+    created_at: datetime | None
+
+
 class ReassignRequest(BaseModel):
     assignee_user_id: int
 
@@ -55,6 +88,120 @@ class SendMessageResponse(BaseModel):
     conversation_id: int
     message_id: int
     whatsapp_message_id: str | None
+
+
+@router.get("", response_model=list[ConversationSummary])
+def list_conversations(
+    state: str = Query(..., min_length=1),
+    current_user: User = Depends(get_current_user),
+    db: Session = Depends(get_db),
+) -> list[ConversationSummary]:
+    try:
+        state_enum = ConversationState(state)
+    except ValueError as exc:
+        raise HTTPException(status_code=status.HTTP_400_BAD_REQUEST, detail="Invalid state") from exc
+
+    if state_enum == ConversationState.CERRADO and current_user.role != UserRole.ADMIN:
+        raise HTTPException(status_code=status.HTTP_403_FORBIDDEN, detail="Forbidden")
+
+    if state_enum == ConversationState.ASIGNADO and current_user.role == UserRole.AGENT:
+        conversations = crud.list_conversations_by_state_and_assignee(
+            db,
+            state=state_enum,
+            assignee_id=current_user.id,
+        )
+    else:
+        conversations = crud.list_conversations_by_state(db, state=state_enum)
+
+    summaries: list[ConversationSummary] = []
+    for conversation in conversations:
+        contact = conversation.contact
+        last_message = crud.get_last_message(db, conversation_id=conversation.id)
+        read_state = crud.get_read_state(
+            db,
+            conversation_id=conversation.id,
+            user_id=current_user.id,
+        )
+        unread_count = crud.count_unread_messages(
+            db,
+            conversation_id=conversation.id,
+            last_read_message_id=read_state.last_read_message_id if read_state else None,
+        )
+        summaries.append(
+            ConversationSummary(
+                conversation_id=conversation.id,
+                state=conversation.state.value,
+                assigned_to=conversation.assigned_to,
+                contact_number=contact.whatsapp_number if contact else "",
+                contact_name=contact.display_name if contact else None,
+                last_activity_at=conversation.last_activity_at,
+                last_message_text=last_message.text if last_message else None,
+                unread_count=unread_count,
+            )
+        )
+    return summaries
+
+
+@router.get("/{conversation_id}", response_model=ConversationDetail)
+def get_conversation_detail(
+    conversation_id: int,
+    current_user: User = Depends(get_current_user),
+    db: Session = Depends(get_db),
+) -> ConversationDetail:
+    conversation = crud.get_conversation(db, conversation_id=conversation_id)
+    if conversation is None:
+        raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail="Conversation not found")
+    ensure_can_view_conversation(current_user, conversation)
+
+    contact = conversation.contact
+    assigned_user = conversation.assigned_user
+    return ConversationDetail(
+        conversation_id=conversation.id,
+        state=conversation.state.value,
+        assigned_to=conversation.assigned_to,
+        assigned_to_username=assigned_user.username if assigned_user else None,
+        contact_number=contact.whatsapp_number if contact else "",
+        contact_name=contact.display_name if contact else None,
+        last_activity_at=conversation.last_activity_at,
+        closed_at=conversation.closed_at,
+        closed_by=conversation.closed_by,
+        previous_conversation_id=conversation.previous_conversation_id,
+    )
+
+
+@router.get("/{conversation_id}/messages", response_model=list[MessageOut])
+def list_messages(
+    conversation_id: int,
+    mark_read: bool = False,
+    current_user: User = Depends(get_current_user),
+    db: Session = Depends(get_db),
+) -> list[MessageOut]:
+    conversation = crud.get_conversation(db, conversation_id=conversation_id)
+    if conversation is None:
+        raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail="Conversation not found")
+    ensure_can_view_conversation(current_user, conversation)
+
+    messages = crud.list_messages(db, conversation_id=conversation_id)
+    if mark_read:
+        last_message_id = messages[-1].id if messages else None
+        crud.upsert_read_state(
+            db,
+            conversation_id=conversation_id,
+            user_id=current_user.id,
+            last_read_message_id=last_message_id,
+        )
+        db.commit()
+
+    return [
+        MessageOut(
+            message_id=message.id,
+            direction=message.direction.value,
+            sender_type=message.sender_type.value,
+            text=message.text,
+            created_at=message.created_at,
+        )
+        for message in messages
+    ]
 
 
 @router.post("/{conversation_id}/take", response_model=ConversationActionResponse)

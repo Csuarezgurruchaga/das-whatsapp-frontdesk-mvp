@@ -1,0 +1,106 @@
+<!DOCTYPE html>
+<html lang="es">
+  <head>
+    <meta charset="UTF-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+    <title>FrontDesk DAS</title>
+    <link rel="preconnect" href="https://fonts.googleapis.com" />
+    <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin />
+    <link
+      href="https://fonts.googleapis.com/css2?family=Space+Grotesk:wght@400;500;600;700&family=IBM+Plex+Mono:wght@400;500&display=swap"
+      rel="stylesheet"
+    />
+    <link rel="stylesheet" href="/static/styles.css" />
+  </head>
+  <body>
+    <div class="app-shell" id="app">
+      <section class="view login-view" id="login-view" aria-labelledby="login-title">
+        <div class="login-card">
+          <div class="brand">
+            <span class="brand-mark">FD</span>
+            <div>
+              <h1 id="login-title">FrontDesk</h1>
+              <p>Acceso operativo para atencion por WhatsApp</p>
+            </div>
+          </div>
+          <form id="login-form">
+            <label>
+              Usuario
+              <input type="text" name="username" autocomplete="username" required />
+            </label>
+            <label>
+              Contrasena
+              <input type="password" name="password" autocomplete="current-password" required />
+            </label>
+            <button type="submit" class="primary">Ingresar</button>
+            <p class="helper" id="login-error" role="status"></p>
+          </form>
+        </div>
+        <div class="login-glow"></div>
+      </section>
+
+      <section class="view main-view hidden" id="main-view">
+        <header class="topbar">
+          <div class="brand">
+            <span class="brand-mark">FD</span>
+            <div>
+              <h1>FrontDesk</h1>
+              <p>Cola y conversaciones en tiempo real</p>
+            </div>
+          </div>
+          <div class="user-panel">
+            <div class="user-chip" id="user-chip">Usuario</div>
+            <button class="ghost" id="logout-btn">Salir</button>
+          </div>
+        </header>
+
+        <nav class="tabs" role="tablist">
+          <button class="tab active" data-state="CHATBOT" role="tab">CHATBOT</button>
+          <button class="tab" data-state="EN_ESPERA" role="tab">EN ESPERA</button>
+          <button class="tab" data-state="ASIGNADO" role="tab">ASIGNADOS</button>
+        </nav>
+
+        <div class="layout">
+          <aside class="panel list-panel">
+            <div class="panel-header">
+              <h2 id="list-title">Conversaciones</h2>
+              <span class="badge" id="list-count">0</span>
+            </div>
+            <div class="list" id="conversation-list"></div>
+          </aside>
+
+          <section class="panel chat-panel">
+            <div class="panel-header">
+              <h2 id="chat-title">Conversacion</h2>
+              <span class="muted" id="chat-meta">Selecciona una conversacion</span>
+            </div>
+            <div class="chat" id="chat-body"></div>
+            <div class="composer">
+              <div class="quick-actions">
+                <button class="chip" data-template="Mensaje inicial">Mensaje inicial</button>
+                <button class="chip" data-template="Mensaje de cierre">Mensaje de cierre</button>
+                <button class="chip" data-template="Mensaje sin respuesta">Mensaje sin respuesta</button>
+              </div>
+              <div class="composer-row">
+                <textarea id="message-input" placeholder="Escribe un mensaje" rows="2"></textarea>
+                <button class="primary" id="send-btn">Enviar</button>
+              </div>
+              <p class="helper" id="composer-error" role="status"></p>
+            </div>
+          </section>
+
+          <aside class="panel detail-panel">
+            <div class="panel-header">
+              <h2>Detalle</h2>
+            </div>
+            <div class="details" id="detail-body">
+              <p class="muted">Sin conversacion activa.</p>
+            </div>
+          </aside>
+        </div>
+      </section>
+    </div>
+
+    <script src="/static/app.js"></script>
+  </body>
+</html>

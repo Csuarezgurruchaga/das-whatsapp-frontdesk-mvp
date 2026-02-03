@@ -2,7 +2,7 @@ from __future__ import annotations
 
 from datetime import datetime, timezone
 
-from sqlalchemy import select, update
+from sqlalchemy import func, select, update
 from sqlalchemy.orm import Session
 
 from .models import (
@@ -87,6 +87,27 @@ def list_conversations_by_state(
     stmt = (
         select(Conversation)
         .where(Conversation.state == state)
+        .order_by(Conversation.last_activity_at.desc())
+        .limit(limit)
+        .offset(offset)
+    )
+    return list(session.scalars(stmt))
+
+
+def list_conversations_by_state_and_assignee(
+    session: Session,
+    *,
+    state: ConversationState,
+    assignee_id: int,
+    limit: int = 100,
+    offset: int = 0,
+) -> list[Conversation]:
+    stmt = (
+        select(Conversation)
+        .where(
+            Conversation.state == state,
+            Conversation.assigned_to == assignee_id,
+        )
         .order_by(Conversation.last_activity_at.desc())
         .limit(limit)
         .offset(offset)
@@ -182,6 +203,37 @@ def get_message_by_whatsapp_message_id(
     stmt = (
         select(Message)
         .where(Message.whatsapp_message_id == whatsapp_message_id)
+        .order_by(Message.created_at.desc())
+        .limit(1)
+    )
+    return session.scalar(stmt)
+
+
+def list_messages(
+    session: Session,
+    *,
+    conversation_id: int,
+    limit: int = 200,
+    offset: int = 0,
+) -> list[Message]:
+    stmt = (
+        select(Message)
+        .where(Message.conversation_id == conversation_id)
+        .order_by(Message.created_at.asc())
+        .limit(limit)
+        .offset(offset)
+    )
+    return list(session.scalars(stmt))
+
+
+def get_last_message(
+    session: Session,
+    *,
+    conversation_id: int,
+) -> Message | None:
+    stmt = (
+        select(Message)
+        .where(Message.conversation_id == conversation_id)
         .order_by(Message.created_at.desc())
         .limit(1)
     )
@@ -388,3 +440,47 @@ def upsert_read_state(
     read_state.last_read_message_id = last_read_message_id
     read_state.last_read_at = last_read_at or datetime.now(timezone.utc)
     return read_state
+
+
+def get_read_state(
+    session: Session,
+    *,
+    conversation_id: int,
+    user_id: int,
+) -> ConversationReadState | None:
+    stmt = select(ConversationReadState).where(
+        ConversationReadState.conversation_id == conversation_id,
+        ConversationReadState.user_id == user_id,
+    )
+    return session.scalar(stmt)
+
+
+def count_unread_messages(
+    session: Session,
+    *,
+    conversation_id: int,
+    last_read_message_id: int | None,
+) -> int:
+    stmt = select(func.count(Message.id)).where(
+        Message.conversation_id == conversation_id,
+        Message.direction == MessageDirection.INBOUND,
+    )
+    if last_read_message_id is not None:
+        stmt = stmt.where(Message.id > last_read_message_id)
+    return int(session.scalar(stmt) or 0)
+
+
+def list_users_by_role(
+    session: Session,
+    *,
+    role: UserRole,
+) -> list[User]:
+    stmt = (
+        select(User)
+        .where(
+            User.role == role,
+            User.disabled_at.is_(None),
+        )
+        .order_by(User.username.asc())
+    )
+    return list(session.scalars(stmt))
