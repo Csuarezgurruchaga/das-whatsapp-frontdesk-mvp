@@ -3,7 +3,7 @@
 ## Project essentials
 - Spec slug: `whatsapp-frontdesk-mvp`
 - Source of truth: `docs/specs/whatsapp-frontdesk-mvp/{SPEC,PLAN,TASKS,ACCEPTANCE}.md`
-- Current task: `T0.2` (collect/validate `bot.yaml`)
+- Current task: N/A (all tasks complete; acceptance run still needs execution in real envs)
 - Bot YAML input artifact: `das-decision-tree.yaml` (approved decision tree + copy)
 
 ## Git / branches
@@ -24,7 +24,8 @@
 - `docs/specs/whatsapp-frontdesk-extensions/` (out of scope for MVP)
 
 ## Execution status reminders
-- `TASKS.md` Execution status updated to `IN_PROGRESS`, `Progress: 1/13`
+- `TASKS.md` Execution status updated to `DONE`, `Progress: 13/13`
+- Acceptance checklist is in `docs/specs/whatsapp-frontdesk-mvp/DEPLOYMENT.md`; execute in local + staging/on-prem when env access is available
 - `CHECKPOINT.md` exists and must be kept up-to-date after each chunk
 
 ## Config conventions (T0.1 done)
