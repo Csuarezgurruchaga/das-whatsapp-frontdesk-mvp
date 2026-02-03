@@ -4,6 +4,7 @@ from dataclasses import dataclass
 from datetime import datetime, timezone
 import hashlib
 import hmac
+import ipaddress
 import json
 import os
 from fastapi import APIRouter, Depends, HTTPException, Request, Response, status
@@ -12,6 +13,7 @@ from sqlalchemy.orm import Session
 
 from app.api.deps import get_db
 from app.bot import menu as bot_menu
+from app.config import get_allowlist_config
 from app.db import crud
 from app.db.models import Conversation, ConversationState, MessageDirection, MessageReceiptStatus, SenderType
 from app.realtime import (
@@ -99,6 +101,30 @@ def _verify_signature(headers: dict[str, str], body: bytes) -> None:
     expected_signature = f"sha256={expected}"
     if not hmac.compare_digest(signature, expected_signature):
         raise HTTPException(status_code=status.HTTP_401_UNAUTHORIZED, detail="Invalid signature")
+
+
+def _get_client_ip(request: Request) -> str | None:
+    forwarded = request.headers.get("x-forwarded-for") or request.headers.get("X-Forwarded-For")
+    if forwarded:
+        return forwarded.split(",", 1)[0].strip()
+    if request.client:
+        return request.client.host
+    return None
+
+
+def _enforce_allowlist(request: Request) -> None:
+    allowlist = get_allowlist_config()
+    if not allowlist.enabled:
+        return
+    client_ip = _get_client_ip(request)
+    if not client_ip:
+        raise HTTPException(status_code=status.HTTP_403_FORBIDDEN, detail="IP not allowed")
+    try:
+        ip_value = ipaddress.ip_address(client_ip)
+    except ValueError as exc:
+        raise HTTPException(status_code=status.HTTP_403_FORBIDDEN, detail="IP not allowed") from exc
+    if not any(ip_value in network for network in allowlist.networks):
+        raise HTTPException(status_code=status.HTTP_403_FORBIDDEN, detail="IP not allowed")
 
 
 def _iter_webhook_values(payload: dict) -> list[dict]:
@@ -486,6 +512,7 @@ def _process_receipt(db: Session, receipt: InboundReceipt) -> None:
 
 @router.get("/whatsapp")
 def verify_whatsapp_webhook(request: Request) -> Response:
+    _enforce_allowlist(request)
     mode = request.query_params.get("hub.mode")
     token = request.query_params.get("hub.verify_token")
     challenge = request.query_params.get("hub.challenge")
@@ -504,6 +531,7 @@ async def receive_whatsapp_webhook(
     request: Request,
     db: Session = Depends(get_db),
 ) -> dict:
+    _enforce_allowlist(request)
     body = await request.body()
     headers = {key.lower(): value for key, value in request.headers.items()}
     _verify_signature(headers, body)

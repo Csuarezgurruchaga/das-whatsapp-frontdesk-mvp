@@ -5,6 +5,7 @@ from fastapi.responses import HTMLResponse
 from fastapi.staticfiles import StaticFiles
 
 from app.api import auth, bot, conversations, realtime, webhooks
+from app.config import validate_runtime_config
 
 app = FastAPI()
 app.include_router(auth.router, prefix="/auth", tags=["auth"])
@@ -15,6 +16,11 @@ app.include_router(webhooks.router, prefix="/webhooks", tags=["webhooks"])
 
 static_dir = Path(__file__).resolve().parent / "static"
 app.mount("/static", StaticFiles(directory=static_dir), name="static")
+
+
+@app.on_event("startup")
+def validate_config() -> None:
+    validate_runtime_config()
 
 
 @app.get("/")
