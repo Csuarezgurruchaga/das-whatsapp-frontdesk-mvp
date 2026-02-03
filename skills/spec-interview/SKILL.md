@@ -139,38 +139,64 @@ Ask high-signal, non-obvious questions until **Open Questions** becomes empty an
 
 ### Interview structure rules
 
-- Ask **6–10 questions per round**.
+- Ask **2–10 questions per round** (default 6–10; early rounds may be shorter, e.g., Q0–Q1).
 - Prefer **multiple-choice (A/B/C/D)** and ALWAYS include as mandatory:
   - `E) Other: <free text>`
   - `F) Not sure / decide later` (ONLY if truly acceptable to defer)
 
-### Decision-support options (built-in “Help Mode”)
+## Step 1 — Render Format Rules (HARD, ALWAYS)
 
-Every question MUST also include these meta-options:
+You MUST ALWAYS render interview questions in the exact **“ronda spec-interview”** format:
 
-- `G) Explain options (A–D)`  
-  Provide plain-language explanation for each option + pros/cons.
+### 1) Round header (mandatory)
+At the start of each round, print:
 
-- `H) Compare options`  
-  Compare specific options the user names (e.g., A vs C, or A vs C vs D) using a fixed rubric.
+- `## Ronda N (Qx–Qy)`
 
-- `I) Recommend`  
-  Recommend the best option given the current constraints, and explicitly list what info is missing to be confident.
+where `N` is the round number and `Qx–Qy` is the inclusive range of questions in this round.
 
-- `J) Show examples`  
-  Give a small concrete example of how each option would look in practice (API calls, flow, pseudo-architecture), without writing implementation code.
+### 2) Per-question header (mandatory)
+Each question MUST start with exactly:
 
-**Important gating rule:**  
-If the user answers `G/H/I/J` for any question:
-1) You MUST provide the requested explanation/comparison/recommendation/examples.
-2) Then you MUST re-ask the SAME question (same A–F options).
-3) You MUST NOT advance to the next question until the user picks A–F (or explicitly defers with F).
+- `Q0 — <título>`
+- `Q1 — <título>`
+- etc.
 
----
+### 3) Options formatting (mandatory)
+Each question MUST include options on separate lines with this exact prefixing:
+
+- `A) ...`
+- `B) ...`
+- (optional `C) ...`, `D) ...`)
+- `E) Other: <texto>`
+- `F) Not sure / decide later`
+
+Rules:
+- You may include **A–D** as needed (2–4 choices), but **E and F are ALWAYS required**.
+- If deferral is truly not acceptable, you MUST still show `F)` but annotate it, e.g.:
+  - `F) Not sure / decide later (allowed, but blocks PLAN/TASKS until resolved)`
+
+### 4) Meta-options single-line rule (mandatory)
+After the A–F lines, you MUST include meta-options in **one single line** exactly:
+
+- `G) Explain options, H) Compare, I) Recommend, J) Show examples`
+
+### 5) End-of-round answer instruction (mandatory)
+At the end of the round, you MUST instruct the user:
+
+- `Responde en UNA sola línea con pares separados por comas: Q0=..., Q1=..., ...`
+
+And you MUST clarify the free-text case:
+
+- `Para texto libre: Q0=E: <tu-texto>`
+
+You MUST also include a short exact example (minimum):
+
+- `Ejemplo: Q0=E: voice-agent-mvp, Q1=A`
 
 ### Answer format requirement (strict)
 
-Require answers in **ONE single line**, using comma-separated pairs.
+At the end of each round, you MUST require answers in **ONE single line**, using comma-separated pairs: `Qn=...`.
 
 **Valid format (case-insensitive):**
 - `Q1=A, Q2=D, Q3=C`

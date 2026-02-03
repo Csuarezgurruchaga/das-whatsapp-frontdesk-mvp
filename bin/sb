@@ -1,0 +1,289 @@
+#!/usr/bin/env bash
+set -euo pipefail
+
+# ----------------------------
+# 0) Flags y sesion
+# ----------------------------
+KILL_OTHERS=0
+PORT_OFFSET=""
+SESSION_ID=""
+
+LABEL_KEY="codex.sb"
+LABEL_VAL="true"
+LABEL_SESSION_KEY="codex.sb.session"
+
+POSITIONAL=()
+while [ "$#" -gt 0 ]; do
+  case "$1" in
+    --kill-others)
+      KILL_OTHERS=1
+      shift
+      ;;
+    --offset)
+      PORT_OFFSET="${2:-}"
+      shift 2
+      ;;
+    --session-id)
+      SESSION_ID="${2:-}"
+      shift 2
+      ;;
+    --)
+      shift
+      POSITIONAL+=("$@")
+      break
+      ;;
+    *)
+      POSITIONAL+=("$@")
+      break
+      ;;
+  esac
+done
+
+if [ "${#POSITIONAL[@]}" -gt 0 ]; then
+  CMD=("${POSITIONAL[@]}")
+else
+  CMD=(codex)
+fi
+
+if [ -z "${SESSION_ID}" ]; then
+  SESSION_ID="$(LC_ALL=C tr -dc 'a-f0-9' </dev/urandom | head -c 6 || true)"
+  if [ -z "${SESSION_ID}" ]; then
+    SESSION_ID="$(date +%s)-$$"
+  fi
+fi
+
+if [ -n "${PORT_OFFSET}" ] && ! [[ "${PORT_OFFSET}" =~ ^[0-9]+$ ]]; then
+  echo "[sb] ERROR: --offset must be a non-negative integer." >&2
+  exit 1
+fi
+
+CONTAINER_NAME="codex-sb-${SESSION_ID}"
+
+# ----------------------------
+# 0.1) Cleanup preventivo (opcional)
+# ----------------------------
+if [ "${KILL_OTHERS}" -eq 1 ]; then
+  OLD_CONTAINERS="$(docker ps -q --filter "label=${LABEL_KEY}=${LABEL_VAL}" || true)"
+  if [ -n "${OLD_CONTAINERS}" ]; then
+    echo "[sb] Stopping previous sb containers..."
+    echo "${OLD_CONTAINERS}" | xargs docker stop >/dev/null 2>&1 || true
+  fi
+fi
+
+# ----------------------------
+# 0.1) Sanity check: GitHub token
+# ----------------------------
+# You said you export this in ~/.zshrc. This script won't print it, just warns if missing.
+if [ -z "${GITHUB_PERSONAL_ACCESS_TOKEN:-}" ]; then
+  echo "[sb] WARNING: GITHUB_PERSONAL_ACCESS_TOKEN is not set in the host shell."
+  echo "     GitHub MCP may be unauthenticated / rate-limited / unable to access private repos."
+  echo "     Fix: export GITHUB_PERSONAL_ACCESS_TOKEN=... (e.g. in ~/.zshrc) and re-run."
+fi
+
+# ----------------------------
+# 1) Monitoreo de espacio
+# ----------------------------
+TOTAL_MB="$(docker system df -v \
+  | grep -E "codex_home|codex_cache" \
+  | awk '{print $3}' \
+  | sed 's/[^0-9.]//g' \
+  | awk '{s+=$1} END {printf "%.0f", s}' \
+  || true)"
+TOTAL_MB="${TOTAL_MB:-0}"
+
+if [ "${TOTAL_MB}" -gt 5000 ]; then
+  echo "--- CAVEAT DE INFRAESTRUCTURA ---"
+  echo "El sandbox esta ocupando ${TOTAL_MB}MB (~$((TOTAL_MB / 1024))GB)."
+  echo "Para liberar espacio en tu Mac, ejecuta:"
+  echo "docker volume rm codex_home codex_cache"
+  echo "---------------------------------"
+fi
+
+# ----------------------------
+# 2) Puertos (base + offset)
+# ----------------------------
+BASE_PORTS=(3000 5173 8000 8080)
+
+port_in_use() {
+  local port="$1"
+  if command -v lsof >/dev/null 2>&1; then
+    lsof -iTCP:"$port" -sTCP:LISTEN -n -P >/dev/null 2>&1
+  elif command -v ss >/dev/null 2>&1; then
+    ss -ltn | awk '{print $4}' | grep -E -q "[:.]$port$"
+  elif command -v netstat >/dev/null 2>&1; then
+    netstat -an 2>/dev/null | grep -E -q "[.:]$port[[:space:]]"
+  else
+    docker ps --format '{{.Ports}}' | grep -E -q "(^|[[:space:]])$port->"
+  fi
+}
+
+find_port_offset() {
+  local offset=0
+  local max_offset=200
+  while [ "$offset" -le "$max_offset" ]; do
+    local all_free=1
+    local base
+    for base in "${BASE_PORTS[@]}"; do
+      local port=$((base + offset))
+      if port_in_use "$port"; then
+        all_free=0
+        break
+      fi
+    done
+    if [ "$all_free" -eq 1 ]; then
+      echo "$offset"
+      return 0
+    fi
+    offset=$((offset + 1))
+  done
+  return 1
+}
+
+if [ -z "${PORT_OFFSET}" ]; then
+  PORT_OFFSET="$(find_port_offset || true)"
+  if [ -z "${PORT_OFFSET}" ]; then
+    echo "[sb] ERROR: no free port offset found for 3000/5173/8000/8080." >&2
+    exit 1
+  fi
+fi
+
+HOST_PORT_3000=$((3000 + PORT_OFFSET))
+HOST_PORT_5173=$((5173 + PORT_OFFSET))
+HOST_PORT_8000=$((8000 + PORT_OFFSET))
+HOST_PORT_8080=$((8080 + PORT_OFFSET))
+
+echo "[sb] Session: ${SESSION_ID} (container: ${CONTAINER_NAME})"
+echo "[sb] Ports: ${HOST_PORT_3000}->3000, ${HOST_PORT_5173}->5173, ${HOST_PORT_8000}->8000, ${HOST_PORT_8080}->8080"
+if [ "${KILL_OTHERS}" -eq 1 ]; then
+  echo "[sb] kill-others enabled"
+fi
+
+CIDFILE="$(mktemp -t codex_sb_cid.XXXXXX)"
+rm -f "$CIDFILE" 2>/dev/null || true
+
+cleanup() {
+  local cidfile="${CIDFILE:-}"
+  if [ -n "$cidfile" ] && [ -f "$cidfile" ]; then
+    local CID=""
+    CID="$(cat "$cidfile" 2>/dev/null || true)"
+    if [ -n "$CID" ]; then
+      docker stop "$CID" >/dev/null 2>&1 || true
+    fi
+    rm -f "$cidfile" >/dev/null 2>&1 || true
+  fi
+}
+trap cleanup EXIT INT TERM
+
+docker run --rm -it \
+  --init \
+  --stop-timeout 10 \
+  --cidfile "${CIDFILE}" \
+  --label "${LABEL_KEY}=${LABEL_VAL}" \
+  --label "${LABEL_SESSION_KEY}=${SESSION_ID}" \
+  --name "${CONTAINER_NAME}" \
+  --user 0:0 \
+  --cap-add=NET_ADMIN \
+  --cap-add=NET_RAW \
+  -p "${HOST_PORT_3000}:3000" \
+  -p "${HOST_PORT_5173}:5173" \
+  -p "${HOST_PORT_8000}:8000" \
+  -p "${HOST_PORT_8080}:8080" \
+  -e OPENAI_ALLOWED_DOMAINS \
+  -e GITHUB_PERSONAL_ACCESS_TOKEN \
+  -e HOME=/root \
+  -v "$PWD:/workspace" \
+  -w /workspace \
+  -v "$HOME/.ssh/id_ed25519_github_new:/root/.ssh/id_ed25519_github_new:ro" \
+  -v "$HOME/.ssh/id_ed25519_github_new.pub:/root/.ssh/id_ed25519_github_new.pub:ro" \
+  -v "$HOME/.ssh-codex/known_hosts:/root/.ssh/known_hosts" \
+  -v "$HOME/.gitconfig:/root/.gitconfig.host:ro" \
+  -v "$HOME/.codex:/root/.codex" \
+  -v codex_home:/root \
+  -v codex_cache:/root/.cache \
+  codex-sandbox:rg \
+  bash -lc '
+    export PATH="/root/.npm-global/bin:/usr/local/sbin:/usr/local/bin:/usr/sbin:/usr/bin:/sbin:/bin"
+    set -euo pipefail
+
+    git config --global user.email "csuarezgurruchaga@gmail.com"
+    git config --global user.name "C. Suarez Gurruchaga"
+    git config --global --add safe.directory "*"
+
+    mkdir -p "$HOME/.ssh" && chmod 700 "$HOME/.ssh"
+    printf "Host github.com\n  HostName github.com\n  User git\n  IdentityFile ~/.ssh/id_ed25519_github_new\n  IdentitiesOnly yes\n" > "$HOME/.ssh/config"
+    chmod 600 "$HOME/.ssh/config"
+
+    if [ ! -f "$HOME/.gitconfig" ]; then
+      printf "[include]\n  path = /root/.gitconfig.host\n" > "$HOME/.gitconfig"
+    fi
+
+    if ! command -v codex > /dev/null 2>&1; then
+      echo "[INFO] Codex no detectado en el PATH. Reinstalando en volumen persistente..."
+      npm install -g @openai/codex@latest > /dev/null 2>&1
+    fi
+
+    hash -r
+    cleanup_mcp() {
+      local code="$?"
+      local mcp_pattern="playwright-mcp"
+      local chrome_pattern="mcp-chrome|chromium.*mcp-chrome"
+
+      if [ -n "${CODEX_PID:-}" ]; then
+        kill -TERM "$CODEX_PID" >/dev/null 2>&1 || true
+      fi
+
+      if command -v pkill >/dev/null 2>&1; then
+        pkill -TERM -f "$mcp_pattern" >/dev/null 2>&1 || true
+        pkill -TERM -f "$chrome_pattern" >/dev/null 2>&1 || true
+      else
+        pids="$(ps -ef | grep -E "$mcp_pattern" | grep -v grep | awk "{print \\$2}")"
+        if [ -n "$pids" ]; then
+          kill -TERM $pids >/dev/null 2>&1 || true
+        fi
+        pids="$(ps -ef | grep -E "$chrome_pattern" | grep -v grep | awk "{print \\$2}")"
+        if [ -n "$pids" ]; then
+          kill -TERM $pids >/dev/null 2>&1 || true
+        fi
+      fi
+
+      for _ in 1 2 3 4 5 6 7 8 9 10; do
+        alive_mcp=0
+        alive_chrome=0
+        if command -v pgrep >/dev/null 2>&1; then
+          pgrep -f "$mcp_pattern" >/dev/null 2>&1 && alive_mcp=1 || true
+          pgrep -f "$chrome_pattern" >/dev/null 2>&1 && alive_chrome=1 || true
+        else
+          ps -ef | grep -E "$mcp_pattern" | grep -v grep >/dev/null 2>&1 && alive_mcp=1 || true
+          ps -ef | grep -E "$chrome_pattern" | grep -v grep >/dev/null 2>&1 && alive_chrome=1 || true
+        fi
+
+        if [ "$alive_mcp" -eq 0 ] && [ "$alive_chrome" -eq 0 ]; then
+          break
+        fi
+        sleep 1
+      done
+
+      if command -v pkill >/dev/null 2>&1; then
+        pkill -KILL -f "$mcp_pattern" >/dev/null 2>&1 || true
+        pkill -KILL -f "$chrome_pattern" >/dev/null 2>&1 || true
+      else
+        pids="$(ps -ef | grep -E "$mcp_pattern" | grep -v grep | awk "{print \\$2}")"
+        if [ -n "$pids" ]; then
+          kill -KILL $pids >/dev/null 2>&1 || true
+        fi
+        pids="$(ps -ef | grep -E "$chrome_pattern" | grep -v grep | awk "{print \\$2}")"
+        if [ -n "$pids" ]; then
+          kill -KILL $pids >/dev/null 2>&1 || true
+        fi
+      fi
+
+      return "$code"
+    }
+
+    trap cleanup_mcp EXIT INT TERM
+
+    "$@" &
+    CODEX_PID=$!
+    wait "$CODEX_PID"
+    exit "$?"
+  ' -- "${CMD[@]}"

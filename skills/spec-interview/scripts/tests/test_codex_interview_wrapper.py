@@ -1,0 +1,370 @@
+import importlib.util
+import pathlib
+import sys
+import unittest
+
+
+def _load_wrapper_module():
+    path = pathlib.Path(__file__).resolve().parents[1] / "codex-interview-wrapper.py"
+    spec = importlib.util.spec_from_file_location("codex_interview_wrapper_script", str(path))
+    assert spec and spec.loader
+    mod = importlib.util.module_from_spec(spec)
+    sys.modules[spec.name] = mod
+    spec.loader.exec_module(mod)
+    return mod
+
+
+WRAP = _load_wrapper_module()
+
+
+SAMPLE = """
+Voy a seguir spec-interview (solo preguntas + spec docs después). Responde en UNA sola línea con pares separados por comas, por ejemplo: Q0=A, Q1=C, Q2=E: ...
+
+## Ronda 1 (Q0–Q9)
+
+Q0 — Spec slug (nombre de la carpeta)
+A) voice-bot
+B) voice-bot-mvp
+C) voice-bot-soporte
+D) voice-bot-ventas
+E) Other: <texto>
+F) Not sure / decide later
+G) Explain options, H) Compare, I) Recommend, J) Show examples
+
+Q1 — Objetivo principal del bot
+A) Soporte al cliente (FAQ + resolver incidencias)
+B) Ventas / calificación de leads
+C) Reservas / agenda (citas, confirmaciones)
+D) Recepción / enrutamiento (derivar a área/persona)
+E) Other: <texto>
+F) Not sure / decide later
+G) Explain options, H) Compare, I) Recommend, J) Show examples
+
+Q2 — Canal de voz
+A) Llamadas telefónicas (PSTN: número real, inbound/outbound)
+B) Web (widget en navegador con micrófono)
+C) App móvil (voz dentro de tu app)
+D) Asíncrono (audios/voice notes; no “conversación en vivo”)
+E) Other: <texto>
+F) Not sure / decide later
+G) Explain options, H) Compare, I) Recommend, J) Show examples
+
+Q3 — Idiomas
+A) Solo español
+B) Español + inglés (bilingüe)
+C) Multilenguaje (varios)
+D) Español pero con región/acento específico como requisito
+E) Other: <texto>
+F) Not sure / decide later
+G) Explain options, H) Compare, I) Recommend, J) Show examples
+
+Q4 — Requisito de latencia (sensación de “tiempo real”)
+A) Muy baja (conversación natural, interrupciones posibles)
+B) Media (pausas aceptables de 2–4s por turno)
+C) No importa (puede tardar)
+D) Depende del canal (teléfono vs web vs app)
+E) Other: <texto>
+F) Not sure / decide later
+G) Explain options, H) Compare, I) Recommend, J) Show examples
+
+Q5 — Calidad de voz (TTS)
+A) “Humana/premium” (marca/tono importa)
+B) “Buena suficiente” (prioridad costo/robustez)
+C) Debe clonar voz / voice persona específica
+D) Debe soportar emociones/estilos (más expresiva)
+E) Other: <texto>
+F) Not sure / decide later
+G) Explain options, H) Compare, I) Recommend, J) Show examples
+
+Q6 — Enfoque de construcción
+A) Plataforma gestionada (más rápido, menos control)
+B) Construcción custom (más control, más ingeniería)
+C) Híbrido (empezar gestionado → migrar a custom)
+D) Solo prototipo/demo primero (sin producción)
+E) Other: <texto>
+F) Not sure / decide later
+G) Explain options, H) Compare, I) Recommend, J) Show examples
+
+Q7 — Tipo de “cerebro” conversacional
+A) LLM libre + herramientas (tool-calling)
+B) Flujos guiados (script/árbol) + fallback a LLM
+C) 100% flujos guiados (sin LLM)
+D) LLM pero con “guardrails” estrictos (respuestas limitadas)
+E) Other: <texto>
+F) Not sure / decide later
+G) Explain options, H) Compare, I) Recommend, J) Show examples
+
+Q8 — Acciones e integraciones (MVP)
+A) Solo responder y recopilar datos (sin integraciones)
+B) 1 integración vía webhook (tu backend hace el resto)
+C) Integración con calendario (crear/editar citas)
+D) Integración con CRM/tickets (crear/actualizar)
+E) Other: <texto>
+F) Not sure / decide later
+G) Explain options, H) Compare, I) Recommend, J) Show examples
+
+Q9 — Sensibilidad de datos / compliance
+A) Baja (sin datos sensibles; logs OK)
+B) Media (PII: nombres, teléfonos; cuidado con retención)
+C) Alta (salud/finanzas/menores; controles fuertes)
+D) No se puede guardar audio/transcripciones (o casi nada)
+E) Other: <texto>
+F) Not sure / decide later
+G) Explain options, H) Compare, I) Recommend, J) Show examples
+""".strip()
+
+SAMPLE_PAREN = """
+Uso el skill spec-interview.
+
+Ronda 1 (8 preguntas)
+
+Q1) Caso de uso principal del voice agent (demo)
+A) Soporte/FAQ (responde preguntas)
+B) Agendamiento (consulta disponibilidad y agenda)
+C) Toma de pedidos/lead intake (captura datos y confirma)
+D) Entrevista guiada (hace preguntas y genera resumen)
+E) Other: <texto>
+F) Not sure / decide later
+G) Explain options (A–D) / H) Compare / I) Recommend / J) Show examples
+
+Q2) Canal de voz (elegí UNO para la demo)
+A) Web (micrófono en navegador)
+B) App móvil (micrófono)
+C) Llamadas telefónicas (PSTN via Twilio u otro)
+D) WhatsApp/Telegram voice notes
+E) Other: <texto>
+F) Not sure / decide later
+G/H/I/J
+""".strip()
+
+SAMPLE_MARKER = """
+› Q0 — Spec slug
+A) voice-agent-mvp
+B) voice-agent
+G) Explain options, H) Compare, I) Recommend, J) Show examples
+
+• Q1 — Idioma
+A) Español
+B) Inglés
+G/H/I/J
+""".strip()
+
+SAMPLE_MARKER_OPTIONS = """
+Q0 — Foo
+› A) alpha
+• B) beta
+│ G) Explain options, H) Compare, I) Recommend, J) Show examples
+""".strip()
+
+SAMPLE_BULLETS = """
+Necesito primero el slug del spec (kebab-case) para crear docs/specs/<slug>/.
+
+Elige uno:
+
+- A) voice-agent-mvp (Recommended)
+- B) voice-agent
+- C) voice-agent-web
+- D) Otro
+- E) Other: <texto>
+- F) Not sure / decide later
+
+Responde en una sola línea con este formato:
+Q0=A (o Q0=E: mi-slug)
+""".strip()
+
+SAMPLE_Q_ONLY = """
+• Q0 — Explicación de opciones
+
+Texto de ayuda sin opciones formales.
+""".strip()
+
+SAMPLE_BULLET_PAREN = """
+Q0 — Explicación de opciones
+- A (tiempo real <100 ms): útil cuando la experiencia tiene que sentirse instantánea.
+- B (latencia <300 ms): buen balance para conversaciones naturales.
+""".strip()
+
+SAMPLE_INCOMPLETE_HEADER = """
+Q0 — Foo
+Please resend the round answers (format reminder: Q0=A, Q1=B)
+""".strip()
+
+
+class TestParseBatch(unittest.TestCase):
+    def test_parse_batch_extracts_questions_and_inline_options(self):
+        lines = [ln.rstrip() for ln in SAMPLE.splitlines()]
+        batch = WRAP.parse_batch(lines, max_lookback=400)
+        self.assertIsNotNone(batch)
+        self.assertEqual(len(batch.questions), 10)
+        q0 = batch.questions[0]
+        self.assertEqual(q0.qid, "Q0")
+        letters = {o.letter for o in q0.options}
+        self.assertIn("A", letters)
+        self.assertIn("B", letters)
+        self.assertIn("G", letters)
+        self.assertIn("H", letters)
+        self.assertIn("I", letters)
+        self.assertIn("J", letters)
+
+    def test_parse_batch_supports_qn_paren_and_slash_meta(self):
+        lines = [ln.rstrip() for ln in SAMPLE_PAREN.splitlines()]
+        batch = WRAP.parse_batch(lines, max_lookback=200)
+        self.assertIsNotNone(batch)
+        self.assertEqual(len(batch.questions), 2)
+        q1 = batch.questions[0]
+        self.assertEqual(q1.qid, "Q1")
+        letters = {o.letter for o in q1.options}
+        self.assertIn("A", letters)
+        self.assertIn("B", letters)
+        self.assertIn("G", letters)
+        self.assertIn("H", letters)
+        self.assertIn("I", letters)
+        self.assertIn("J", letters)
+        q2 = batch.questions[1]
+        letters2 = {o.letter for o in q2.options}
+        self.assertIn("A", letters2)
+        self.assertIn("B", letters2)
+        self.assertIn("G", letters2)
+        self.assertIn("H", letters2)
+        self.assertIn("I", letters2)
+        self.assertIn("J", letters2)
+
+    def test_parse_batch_supports_bulleted_options_and_q_ref(self):
+        lines = [ln.rstrip() for ln in SAMPLE_BULLETS.splitlines()]
+        batch = WRAP.parse_batch(lines, max_lookback=200)
+        self.assertIsNotNone(batch)
+        self.assertEqual(len(batch.questions), 1)
+        q0 = batch.questions[0]
+        self.assertEqual(q0.qid, "Q0")
+        letters = {o.letter for o in q0.options}
+        self.assertIn("A", letters)
+        self.assertIn("B", letters)
+        self.assertIn("E", letters)
+        self.assertIn("F", letters)
+
+    def test_parse_batch_can_disable_q_ref_fallback(self):
+        lines = [ln.rstrip() for ln in SAMPLE_BULLETS.splitlines()]
+        batch = WRAP.parse_batch(lines, max_lookback=200, allow_qref_fallback=False)
+        self.assertIsNone(batch)
+
+    def test_parse_batch_supports_leading_ui_markers(self):
+        lines = [ln.rstrip() for ln in SAMPLE_MARKER.splitlines()]
+        batch = WRAP.parse_batch(lines, max_lookback=200)
+        self.assertIsNotNone(batch)
+        self.assertEqual(len(batch.questions), 2)
+        self.assertEqual(batch.questions[0].qid, "Q0")
+        self.assertEqual(batch.questions[1].qid, "Q1")
+
+    def test_parse_batch_rejects_headers_without_ab_options(self):
+        lines = [ln.rstrip() for ln in SAMPLE_INCOMPLETE_HEADER.splitlines()]
+        batch = WRAP.parse_batch(lines, max_lookback=200)
+        self.assertIsNone(batch)
+
+    def test_parse_batch_supports_ui_markers_in_option_lines(self):
+        lines = [ln.rstrip() for ln in SAMPLE_MARKER_OPTIONS.splitlines()]
+        batch = WRAP.parse_batch(lines, max_lookback=200)
+        self.assertIsNotNone(batch)
+        self.assertEqual(len(batch.questions), 1)
+        q0 = batch.questions[0]
+        letters = {o.letter for o in q0.options}
+        self.assertIn("A", letters)
+        self.assertIn("B", letters)
+        self.assertIn("G", letters)
+
+    def test_parse_batch_rejects_qn_without_options(self):
+        lines = [ln.rstrip() for ln in SAMPLE_Q_ONLY.splitlines()]
+        batch = WRAP.parse_batch(lines, max_lookback=50)
+        self.assertIsNone(batch)
+
+    def test_parse_batch_supports_bullet_paren_options(self):
+        lines = [ln.rstrip() for ln in SAMPLE_BULLET_PAREN.splitlines()]
+        batch = WRAP.parse_batch(lines, max_lookback=50)
+        self.assertIsNotNone(batch)
+        q0 = batch.questions[0]
+        letters = {o.letter for o in q0.options}
+        self.assertIn("A", letters)
+        self.assertIn("B", letters)
+
+    def test_format_answer_line(self):
+        self.assertEqual(WRAP.format_answer_line(["Q0=A", "Q1=E: foo"]), "Q0=A, Q1=E: foo")
+
+    def test_resend_prompt_regex(self):
+        self.assertIsNotNone(
+            WRAP.RESEND_PROMPT_RE.search(
+                "Please resend the round answers (format reminder: Q0=A, Q1=B)"
+            )
+        )
+        self.assertIsNotNone(
+            WRAP.RESEND_PROMPT_RE.search("format reminder: Q12=A, Q13=B")
+        )
+
+class TestBatchCompletenessGating(unittest.TestCase):
+    def test_gate_rejects_single_question_even_if_settled(self):
+        lines = [
+            "Q20 — Foo",
+            "A) a",
+            "B) b",
+            "Responde en UNA sola línea con pares separados por comas, por ejemplo: Q20=A",
+        ]
+        ok, reason = WRAP._batch_completeness_gate(lines, quiet_for=10.0, settle_sec=0.35)
+        self.assertFalse(ok)
+        self.assertIn("headers", reason)
+
+    def test_gate_accepts_two_questions_with_instruction(self):
+        lines = [
+            "## Ronda 3 (Q14–Q20)",
+            "Q14 — Uno",
+            "A) a",
+            "B) b",
+            "Q15 — Dos",
+            "A) a",
+            "B) b",
+            "Responde en UNA sola línea con pares separados por comas, por ejemplo: Q14=A, Q15=B",
+        ]
+        ok, _reason = WRAP._batch_completeness_gate(lines, quiet_for=0.4, settle_sec=0.35)
+        self.assertTrue(ok)
+
+    def test_gate_waits_longer_when_instruction_missing(self):
+        lines = [
+            "Q0 — Uno",
+            "A) a",
+            "B) b",
+            "Q1 — Dos",
+            "A) a",
+            "B) b",
+        ]
+        ok1, _reason1 = WRAP._batch_completeness_gate(lines, quiet_for=0.4, settle_sec=0.35)
+        self.assertFalse(ok1)
+        ok2, _reason2 = WRAP._batch_completeness_gate(lines, quiet_for=2.0, settle_sec=0.35)
+        self.assertTrue(ok2)
+
+
+class TestRoundBuffer(unittest.TestCase):
+    def test_round_buffer_prefers_captured_round_over_truncated_recent(self):
+        rb = WRAP.RoundBuffer(max_lines=200)
+        stream_lines = [
+            "## Ronda 1 (Q0–Q2)",
+            "Q0 — Uno",
+            "A) a",
+            "B) b",
+            "Q1 — Dos",
+            "A) a",
+            "B) b",
+            "Q2 — Tres",
+            "A) a",
+            "B) b",
+            "Responde en UNA sola línea con pares separados por comas, por ejemplo: Q0=A, Q1=B, Q2=C",
+        ]
+        for ln in stream_lines:
+            rb.push_line(ln)
+
+        # Even if the global recent buffer only retained the tail, the round buffer
+        # should keep early questions once it has started capturing.
+        recent = stream_lines[-3:]
+        preferred = rb.preferred_lines(recent)
+        self.assertGreaterEqual(len(preferred), len(recent))
+        self.assertTrue(any("Q0 —" in ln for ln in preferred))
+
+
+if __name__ == "__main__":
+    unittest.main()

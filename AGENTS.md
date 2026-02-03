@@ -24,6 +24,27 @@
 - If they do not exist, state that clearly (do not add tooling unless asked).
 - If a command could modify or delete files, ask before running it.
 
+### Bugfix protocol (default)
+
+- **Rule:** No fix without repro.
+
+When a bug is reported:
+1) Create a minimal reproduction that fails (prefer: automated test).
+2) Commit the failing repro/test before attempting fixes (use squash/fixup so the final PR history is green-only).
+3) Implement the fix.
+4) Prove the fix by making the repro/test pass and running the relevant suite.
+5) Add regression coverage to prevent recurrence.
+
+**Acceptable proofs (in order):**
+- Deterministic automated test (unit/integration/e2e)
+- Deterministic repro script/fixture + CI command
+- Logged assertion/invariant + controlled repro steps + captured artifacts
+
+**Exceptions (must be stated explicitly in the PR/commit message):**
+- Repro requires external systems not available in CI
+- Non-deterministic/concurrency issues where a stable test is not feasible
+- Emergency hotfix (must be followed by a repro within N days)
+
 ## Environment & tooling
 
 - Primary language: Python.
@@ -37,6 +58,10 @@
 
 - You are not alone in this environment. Do not impact or overwrite the work of others.
 - If multiple agents are used, only the primary (orchestrator) agent should integrate changes.
+- Subagents must not propose fixes without also proposing:
+  - where the repro/test should live
+  - what condition fails pre-fix
+  - what command(s) prove the fix
 
 ## Output expectations
 

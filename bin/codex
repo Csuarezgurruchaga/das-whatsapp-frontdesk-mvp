@@ -1,0 +1,77 @@
+#!/usr/bin/env bash
+set -euo pipefail
+
+SCRIPT_DIR="$(cd -- "$(dirname -- "${BASH_SOURCE[0]}")" && pwd -P)"
+
+SECRETS_FILE_DEFAULT="$HOME/.codex/secrets/github.env"
+SECRETS_FILE="${CODEX_GITHUB_SECRETS_FILE:-$SECRETS_FILE_DEFAULT}"
+
+load_from_keychain() {
+  if ! command -v security >/dev/null 2>&1; then
+    return 1
+  fi
+
+  local token
+  token="$(security find-generic-password -s "codex-github-token" -w 2>/dev/null || true)"
+  if [[ -n "${token}" ]]; then
+    export GITHUB_PERSONAL_ACCESS_TOKEN="${token}"
+    return 0
+  fi
+  return 1
+}
+
+load_from_file() {
+  if [[ -f "${SECRETS_FILE}" ]]; then
+    # shellcheck source=/dev/null
+    source "${SECRETS_FILE}"
+    return 0
+  fi
+  return 1
+}
+
+if [[ -z "${GITHUB_PERSONAL_ACCESS_TOKEN:-}" ]]; then
+  load_from_file || true
+fi
+
+if [[ -z "${GITHUB_PERSONAL_ACCESS_TOKEN:-}" ]]; then
+  load_from_keychain || true
+fi
+
+if [[ -z "${GITHUB_PERSONAL_ACCESS_TOKEN:-}" ]]; then
+  cat >&2 <<EOF
+GITHUB_PERSONAL_ACCESS_TOKEN is not set.
+
+Fix (recommended): store it in macOS Keychain:
+  security add-generic-password -s "codex-github-token" -a "$USER" -w '<TOKEN>' -U
+
+Fix (alternative): create ${SECRETS_FILE} (chmod 600) with:
+  export GITHUB_PERSONAL_ACCESS_TOKEN='<TOKEN>'
+
+Then run: codex
+EOF
+  exit 1
+fi
+
+export GITHUB_TOKEN="${GITHUB_TOKEN:-$GITHUB_PERSONAL_ACCESS_TOKEN}"
+
+IFS=':' read -r -a PATH_PARTS <<< "${PATH:-}"
+CODEX_BIN=""
+for p in "${PATH_PARTS[@]}"; do
+  [[ -z "${p}" ]] && p="."
+  if [[ "${p}" == "${SCRIPT_DIR}" ]]; then
+    continue
+  fi
+  if [[ -x "${p}/codex" ]]; then
+    CODEX_BIN="${p}/codex"
+    break
+  fi
+done
+
+if [[ -z "${CODEX_BIN}" ]]; then
+  echo "Could not find the real 'codex' binary on PATH (excluding ${SCRIPT_DIR})." >&2
+  echo "Make sure the official Codex CLI is installed and available on PATH." >&2
+  exit 1
+fi
+
+exec "${CODEX_BIN}" "$@"
+

@@ -1,3 +1,31 @@
 config.toml
 config.json
 
+# macOS
+.DS_Store
+
+# Codex local/runtime state (do not commit)
+auth.json
+history.jsonl
+models_cache.json
+session_index.jsonl
+.personality_migration
+log/
+tmp/
+sessions/
+shell_snapshots/
+secrets/
+
+# Prompt hygiene: only track continue-ma
+prompts/continue.md
+
+# Skill folder local artifacts
+skills/.DS_Store
+
+# Python cache
+__pycache__/
+*.pyc
+
+# Local backups
+*.bak
+*.bak.*
