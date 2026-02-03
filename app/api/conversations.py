@@ -14,7 +14,22 @@ from app.api.deps import (
     require_roles,
 )
 from app.db import crud
-from app.db.models import Conversation, ConversationEventType, ConversationState, SenderType, User, UserRole
+from app.db.models import (
+    Conversation,
+    ConversationEventType,
+    ConversationState,
+    MessageDirection,
+    SenderType,
+    User,
+    UserRole,
+)
+from app.realtime import (
+    build_conversation_event,
+    build_message_event,
+    dispatch_event,
+    make_recipient_filter_for_conversation_update,
+    make_recipient_filter_for_message,
+)
 from app.whatsapp import send_outbound_text
 
 router = APIRouter()
@@ -80,6 +95,24 @@ def take_conversation(
     )
     db.commit()
 
+    dispatch_event(
+        build_conversation_event(
+            conversation_id=conversation_id,
+            state=ConversationState.ASIGNADO,
+            assigned_to=current_user.id,
+            last_activity_at=now,
+            previous_state=ConversationState.EN_ESPERA,
+            previous_assigned_to=None,
+            reason="take",
+        ),
+        make_recipient_filter_for_conversation_update(
+            state=ConversationState.ASIGNADO,
+            assigned_to=current_user.id,
+            previous_state=ConversationState.EN_ESPERA,
+            previous_assigned_to=None,
+        ),
+    )
+
     return ConversationActionResponse(
         ok=True,
         conversation_id=conversation_id,
@@ -104,6 +137,16 @@ def reassign_conversation(
             detail="Assignee must be an agent or the current admin",
         )
 
+    conversation_before = crud.get_conversation(db, conversation_id=conversation_id)
+    if conversation_before is None:
+        raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail="Conversation not found")
+    if conversation_before.state != ConversationState.ASIGNADO:
+        raise HTTPException(
+            status_code=status.HTTP_409_CONFLICT,
+            detail="Conversation not assigned",
+        )
+
+    previous_assigned_to = conversation_before.assigned_to
     now = datetime.now(timezone.utc)
     stmt = (
         update(Conversation)
@@ -146,6 +189,24 @@ def reassign_conversation(
     )
     db.commit()
 
+    dispatch_event(
+        build_conversation_event(
+            conversation_id=conversation_id,
+            state=ConversationState.ASIGNADO,
+            assigned_to=assignee.id,
+            last_activity_at=now,
+            previous_state=ConversationState.ASIGNADO,
+            previous_assigned_to=previous_assigned_to,
+            reason="reassign",
+        ),
+        make_recipient_filter_for_conversation_update(
+            state=ConversationState.ASIGNADO,
+            assigned_to=assignee.id,
+            previous_state=ConversationState.ASIGNADO,
+            previous_assigned_to=previous_assigned_to,
+        ),
+    )
+
     return ConversationActionResponse(
         ok=True,
         conversation_id=conversation_id,
@@ -172,6 +233,8 @@ def close_conversation(
             detail="Conversation not assigned",
         )
 
+    previous_assigned_to = conversation.assigned_to
+    previous_state = conversation.state
     now = datetime.now(timezone.utc)
     conditions = [
         Conversation.id == conversation_id,
@@ -206,6 +269,24 @@ def close_conversation(
     )
     db.commit()
 
+    dispatch_event(
+        build_conversation_event(
+            conversation_id=conversation_id,
+            state=ConversationState.CERRADO,
+            assigned_to=None,
+            last_activity_at=now,
+            previous_state=previous_state,
+            previous_assigned_to=previous_assigned_to,
+            reason="close",
+        ),
+        make_recipient_filter_for_conversation_update(
+            state=ConversationState.CERRADO,
+            assigned_to=None,
+            previous_state=previous_state,
+            previous_assigned_to=previous_assigned_to,
+        ),
+    )
+
     return ConversationActionResponse(
         ok=True,
         conversation_id=conversation_id,
@@ -234,6 +315,7 @@ def send_message(
     if conversation.contact is None:
         raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail="Contact not found")
 
+    now = datetime.now(timezone.utc)
     result = send_outbound_text(
         db,
         conversation_id=conversation_id,
@@ -241,8 +323,40 @@ def send_message(
         text=text,
         sender_type=SenderType.AGENT,
         actor_user_id=current_user.id,
+        now=now,
     )
     db.commit()
+
+    dispatch_event(
+        build_message_event(
+            conversation_id=conversation_id,
+            message_id=result.message_id,
+            direction=MessageDirection.OUTBOUND.value,
+            sender_type=SenderType.AGENT.value,
+            text=text,
+            whatsapp_message_id=result.whatsapp_message_id,
+            created_at=now,
+            conversation_state=conversation.state,
+            assigned_to=conversation.assigned_to,
+        ),
+        make_recipient_filter_for_message(
+            state=conversation.state,
+            assigned_to=conversation.assigned_to,
+        ),
+    )
+    dispatch_event(
+        build_conversation_event(
+            conversation_id=conversation_id,
+            state=conversation.state,
+            assigned_to=conversation.assigned_to,
+            last_activity_at=now,
+            reason="message",
+        ),
+        make_recipient_filter_for_conversation_update(
+            state=conversation.state,
+            assigned_to=conversation.assigned_to,
+        ),
+    )
 
     if not result.ok:
         raise HTTPException(status_code=status.HTTP_502_BAD_GATEWAY, detail="WhatsApp send failed")

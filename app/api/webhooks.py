@@ -6,7 +6,6 @@ import hashlib
 import hmac
 import json
 import os
-
 from fastapi import APIRouter, Depends, HTTPException, Request, Response, status
 from sqlalchemy.exc import IntegrityError
 from sqlalchemy.orm import Session
@@ -14,8 +13,16 @@ from sqlalchemy.orm import Session
 from app.api.deps import get_db
 from app.bot import menu as bot_menu
 from app.db import crud
-from app.db.models import ConversationState, MessageDirection, MessageReceiptStatus, SenderType
-from app.whatsapp import send_outbound_text
+from app.db.models import Conversation, ConversationState, MessageDirection, MessageReceiptStatus, SenderType
+from app.realtime import (
+    RecipientFilter,
+    build_conversation_event,
+    build_message_event,
+    dispatch_event,
+    make_recipient_filter_for_conversation_update,
+    make_recipient_filter_for_message,
+)
+from app.whatsapp import OutboundSendResult, send_outbound_text
 
 router = APIRouter()
 
@@ -40,6 +47,19 @@ class InboundReceipt:
     whatsapp_message_id: str | None
     status: str | None
     payload: dict
+
+
+@dataclass(frozen=True)
+class OutboundMessageInfo:
+    text: str
+    result: OutboundSendResult
+    sender_type: SenderType
+
+
+@dataclass(frozen=True)
+class PendingRealtimeEvent:
+    payload: dict
+    recipient_filter: RecipientFilter
 
 
 def _get_verify_token() -> str:
@@ -165,7 +185,7 @@ def _get_or_create_contact(
     return contact.id
 
 
-def _get_or_create_conversation(db: Session, *, contact_id: int) -> tuple[int, ConversationState]:
+def _get_or_create_conversation(db: Session, *, contact_id: int) -> Conversation:
     conversation = crud.get_latest_conversation_for_contact(db, contact_id=contact_id)
     if conversation is None:
         conversation = crud.create_conversation(
@@ -174,7 +194,7 @@ def _get_or_create_conversation(db: Session, *, contact_id: int) -> tuple[int, C
             state=ConversationState.CHATBOT,
         )
         db.flush()
-        return conversation.id, conversation.state
+        return conversation
 
     if conversation.state == ConversationState.CERRADO:
         conversation = crud.create_conversation(
@@ -184,9 +204,9 @@ def _get_or_create_conversation(db: Session, *, contact_id: int) -> tuple[int, C
             previous_conversation_id=conversation.id,
         )
         db.flush()
-        return conversation.id, conversation.state
+        return conversation
 
-    return conversation.id, conversation.state
+    return conversation
 
 
 def _resolve_current_node_id(config: bot_menu.BotConfig, last_bot_text: str | None) -> str | None:
@@ -207,14 +227,15 @@ def _handle_chatbot_message(
     whatsapp_number: str,
     inbound_text: str,
     now: datetime,
-) -> ConversationState:
+) -> tuple[ConversationState, list[OutboundMessageInfo]]:
+    outbound: list[OutboundMessageInfo] = []
     config = bot_menu.get_bot_config()
     last_bot_text = crud.get_last_bot_message_text(db, conversation_id=conversation_id)
     current_node_id = _resolve_current_node_id(config, last_bot_text)
 
     if current_node_id is None and not inbound_text.strip().isdigit():
         root_node = config.nodes[config.root]
-        send_outbound_text(
+        result = send_outbound_text(
             db,
             conversation_id=conversation_id,
             to_number=whatsapp_number,
@@ -223,7 +244,14 @@ def _handle_chatbot_message(
             actor_user_id=None,
             now=now,
         )
-        return ConversationState.CHATBOT
+        outbound.append(
+            OutboundMessageInfo(
+                text=root_node.on_enter_text,
+                result=result,
+                sender_type=SenderType.BOT,
+            )
+        )
+        return ConversationState.CHATBOT, outbound
 
     route = bot_menu.route_chatbot_input(
         config,
@@ -232,7 +260,7 @@ def _handle_chatbot_message(
         now=now,
     )
     for message in route.messages:
-        send_outbound_text(
+        result = send_outbound_text(
             db,
             conversation_id=conversation_id,
             to_number=whatsapp_number,
@@ -241,6 +269,7 @@ def _handle_chatbot_message(
             actor_user_id=None,
             now=now,
         )
+        outbound.append(OutboundMessageInfo(text=message, result=result, sender_type=SenderType.BOT))
 
     if route.handoff_requested and route.handoff_available:
         crud.update_conversation_state(
@@ -250,8 +279,8 @@ def _handle_chatbot_message(
             assigned_to=None,
             now=now,
         )
-        return ConversationState.EN_ESPERA
-    return ConversationState.CHATBOT
+        return ConversationState.EN_ESPERA, outbound
+    return ConversationState.CHATBOT, outbound
 
 
 def _handle_waiting_message(
@@ -260,10 +289,11 @@ def _handle_waiting_message(
     conversation_id: int,
     whatsapp_number: str,
     now: datetime,
-) -> None:
+) -> list[OutboundMessageInfo]:
+    outbound: list[OutboundMessageInfo] = []
     bot_texts = crud.list_bot_message_texts(db, conversation_id=conversation_id)
     if bot_menu.should_send_waiting_followup(bot_texts):
-        send_outbound_text(
+        result = send_outbound_text(
             db,
             conversation_id=conversation_id,
             to_number=whatsapp_number,
@@ -272,6 +302,14 @@ def _handle_waiting_message(
             actor_user_id=None,
             now=now,
         )
+        outbound.append(
+            OutboundMessageInfo(
+                text=bot_menu.WAITING_FOLLOWUP_TEXT,
+                result=result,
+                sender_type=SenderType.BOT,
+            )
+        )
+    return outbound
 
 
 def _process_inbound_message(
@@ -279,57 +317,147 @@ def _process_inbound_message(
     inbound: InboundMessage,
     *,
     seen_message_ids: set[str],
-) -> None:
+) -> list[PendingRealtimeEvent]:
+    pending: list[PendingRealtimeEvent] = []
     if inbound.whatsapp_message_id:
         if inbound.whatsapp_message_id in seen_message_ids:
-            return
+            return pending
         existing = crud.get_message_by_whatsapp_message_id(
             db, whatsapp_message_id=inbound.whatsapp_message_id
         )
         if existing is not None:
-            return
+            return pending
         seen_message_ids.add(inbound.whatsapp_message_id)
 
     if not inbound.from_number:
-        return
+        return pending
 
     contact_id = _get_or_create_contact(
         db,
         whatsapp_number=inbound.from_number,
         display_name=inbound.profile_name,
     )
-    conversation_id, state = _get_or_create_conversation(db, contact_id=contact_id)
+    conversation = _get_or_create_conversation(db, contact_id=contact_id)
+    state = conversation.state
+    assigned_to = conversation.assigned_to
 
-    crud.append_message(
+    message = crud.append_message(
         db,
-        conversation_id=conversation_id,
+        conversation_id=conversation.id,
         direction=MessageDirection.INBOUND,
         sender_type=SenderType.USER,
         text=inbound.text,
         whatsapp_message_id=inbound.whatsapp_message_id,
     )
+    db.flush()
 
     now = datetime.now(timezone.utc)
-    crud.touch_conversation(db, conversation_id=conversation_id, now=now)
+    crud.touch_conversation(db, conversation_id=conversation.id, now=now)
 
     if inbound.text is None:
-        return
+        pending.append(
+            PendingRealtimeEvent(
+                payload=build_conversation_event(
+                    conversation_id=conversation.id,
+                    state=state,
+                    assigned_to=assigned_to,
+                    last_activity_at=now,
+                    reason="message",
+                ),
+                recipient_filter=make_recipient_filter_for_conversation_update(
+                    state=state,
+                    assigned_to=assigned_to,
+                ),
+            )
+        )
+        return pending
 
+    outbound_messages: list[OutboundMessageInfo] = []
+    new_state = state
     if state == ConversationState.CHATBOT:
-        _handle_chatbot_message(
+        new_state, outbound_messages = _handle_chatbot_message(
             db,
-            conversation_id=conversation_id,
+            conversation_id=conversation.id,
             whatsapp_number=inbound.from_number,
             inbound_text=inbound.text,
             now=now,
         )
     elif state == ConversationState.EN_ESPERA:
-        _handle_waiting_message(
+        outbound_messages = _handle_waiting_message(
             db,
-            conversation_id=conversation_id,
+            conversation_id=conversation.id,
             whatsapp_number=inbound.from_number,
             now=now,
         )
+
+    if new_state != ConversationState.ASIGNADO:
+        assigned_to_for_event = None
+    else:
+        assigned_to_for_event = assigned_to
+
+    pending.append(
+        PendingRealtimeEvent(
+            payload=build_message_event(
+                conversation_id=conversation.id,
+                message_id=message.id,
+                direction=MessageDirection.INBOUND.value,
+                sender_type=SenderType.USER.value,
+                text=inbound.text,
+                whatsapp_message_id=inbound.whatsapp_message_id,
+                created_at=now,
+                conversation_state=new_state,
+                assigned_to=assigned_to_for_event,
+            ),
+            recipient_filter=make_recipient_filter_for_message(
+                state=new_state,
+                assigned_to=assigned_to_for_event,
+            ),
+        )
+    )
+
+    for outbound in outbound_messages:
+        pending.append(
+            PendingRealtimeEvent(
+                payload=build_message_event(
+                    conversation_id=conversation.id,
+                    message_id=outbound.result.message_id,
+                    direction=MessageDirection.OUTBOUND.value,
+                    sender_type=outbound.sender_type.value,
+                    text=outbound.text,
+                    whatsapp_message_id=outbound.result.whatsapp_message_id,
+                    created_at=now,
+                    conversation_state=new_state,
+                    assigned_to=assigned_to_for_event,
+                ),
+                recipient_filter=make_recipient_filter_for_message(
+                    state=new_state,
+                    assigned_to=assigned_to_for_event,
+                ),
+            )
+        )
+
+    reason = "handoff" if new_state != state else "message"
+    pending.append(
+        PendingRealtimeEvent(
+            payload=build_conversation_event(
+                conversation_id=conversation.id,
+                state=new_state,
+                assigned_to=assigned_to_for_event,
+                last_activity_at=now,
+                previous_state=state if new_state != state else None,
+                previous_assigned_to=assigned_to if new_state != state else None,
+                reason=reason,
+            ),
+            recipient_filter=make_recipient_filter_for_conversation_update(
+                state=new_state,
+                assigned_to=assigned_to_for_event,
+                previous_state=state if new_state != state else None,
+                previous_assigned_to=assigned_to if new_state != state else None,
+            ),
+        )
+    )
+
+    return pending
 
 
 def _process_receipt(db: Session, receipt: InboundReceipt) -> None:
@@ -386,11 +514,14 @@ async def receive_whatsapp_webhook(
         raise HTTPException(status_code=status.HTTP_400_BAD_REQUEST, detail="Invalid JSON") from exc
 
     seen_message_ids: set[str] = set()
+    pending_events: list[PendingRealtimeEvent] = []
     for inbound in _extract_inbound_messages(payload):
-        _process_inbound_message(db, inbound, seen_message_ids=seen_message_ids)
+        pending_events.extend(_process_inbound_message(db, inbound, seen_message_ids=seen_message_ids))
 
     for receipt in _extract_receipts(payload):
         _process_receipt(db, receipt)
 
     db.commit()
+    for event in pending_events:
+        dispatch_event(event.payload, event.recipient_filter)
     return {"ok": True}
