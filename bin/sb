@@ -181,6 +181,7 @@ trap cleanup EXIT INT TERM
 # set CODEX_SCREENSHOTS_DIR to a *host* directory (e.g. "$HOME/Desktop/screenshots").
 # The directory will be mounted read-only at /screenshots.
 SCREENSHOTS_MOUNT_ARGS=()
+DESKTOP_SCREENSHOTS_MOUNT_ARGS=()
 if [ -n "${CODEX_SCREENSHOTS_DIR:-}" ]; then
   if [ -d "${CODEX_SCREENSHOTS_DIR}" ]; then
     echo "[sb] Mounting screenshots: ${CODEX_SCREENSHOTS_DIR} -> /screenshots (read-only)"
@@ -193,7 +194,6 @@ fi
 # Additionally, mount the common macOS screenshots folder (if present) as read-only.
 # This is useful when screenshots are saved to: ~/Desktop/screenshots
 DESKTOP_SCREENSHOTS_DIR="${HOME}/Desktop/screenshots"
-DESKTOP_SCREENSHOTS_MOUNT_ARGS=()
 if [ -d "${DESKTOP_SCREENSHOTS_DIR}" ]; then
   echo "[sb] Mounting desktop screenshots: ${DESKTOP_SCREENSHOTS_DIR} -> /host-screenshots (read-only)"
   DESKTOP_SCREENSHOTS_MOUNT_ARGS=(-v "${DESKTOP_SCREENSHOTS_DIR}:/host-screenshots:ro")
