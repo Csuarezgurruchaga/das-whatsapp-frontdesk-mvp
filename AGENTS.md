@@ -77,24 +77,6 @@ This project is configured with Model Context Protocol (MCP) servers that extend
 
 ## Available MCP Servers
 
-### GitHub MCP
-Provides integration with GitHub repositories and operations.
-
-Always use GitHub username: `csuarezgurruchaga` (display: `@csuarezgurruchaga`).
-
-**When to use:**
-- List or search repositories
-- Read file contents from repos
-- Create, update, or search issues
-- Review pull requests and commits
-- Analyze code structure across repositories
-
-**Common tasks:**
-- "Show me the recent commits in [repo-name]"
-- "Create an issue in [repo-name] for [description]"
-- "Search for files containing [keyword] in [repo-name]"
-- "List open pull requests in [repo-name]"
-
 ### Context7 MCP
 Provides just-in-time documentation/context retrieval for libraries and frameworks.
 
