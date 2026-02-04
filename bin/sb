@@ -83,20 +83,23 @@ fi
 # ----------------------------
 # 1) Monitoreo de espacio
 # ----------------------------
-TOTAL_MB="$(docker system df -v \
-  | grep -E "codex_home|codex_cache" \
-  | awk '{print $3}' \
-  | sed 's/[^0-9.]//g' \
-  | awk '{s+=$1} END {printf "%.0f", s}' \
-  || true)"
-TOTAL_MB="${TOTAL_MB:-0}"
+# This can be slow on some Docker setups. Skip with: SB_SKIP_DOCKER_DF=1
+if [ "${SB_SKIP_DOCKER_DF:-0}" != "1" ]; then
+  TOTAL_MB="$(docker system df -v \
+    | grep -E "codex_home|codex_cache" \
+    | awk '{print $3}' \
+    | sed 's/[^0-9.]//g' \
+    | awk '{s+=$1} END {printf "%.0f", s}' \
+    || true)"
+  TOTAL_MB="${TOTAL_MB:-0}"
 
-if [ "${TOTAL_MB}" -gt 5000 ]; then
-  echo "--- CAVEAT DE INFRAESTRUCTURA ---"
-  echo "El sandbox esta ocupando ${TOTAL_MB}MB (~$((TOTAL_MB / 1024))GB)."
-  echo "Para liberar espacio en tu Mac, ejecuta:"
-  echo "docker volume rm codex_home codex_cache"
-  echo "---------------------------------"
+  if [ "${TOTAL_MB}" -gt 5000 ]; then
+    echo "--- CAVEAT DE INFRAESTRUCTURA ---"
+    echo "El sandbox esta ocupando ${TOTAL_MB}MB (~$((TOTAL_MB / 1024))GB)."
+    echo "Para liberar espacio en tu Mac, ejecuta:"
+    echo "docker volume rm codex_home codex_cache"
+    echo "---------------------------------"
+  fi
 fi
 
 # ----------------------------
@@ -175,49 +178,33 @@ cleanup() {
 trap cleanup EXIT INT TERM
 
 # ----------------------------
-# 2.5) Optional: host screenshots mount
+# 2.5) Host screenshots mount (required)
 # ----------------------------
-# If you want Codex (inside the container) to be able to open screenshots from your host,
-# set CODEX_SCREENSHOTS_DIR to a *host* directory (e.g. "$HOME/Desktop/screenshots").
-# The directory will be mounted read-only at /screenshots.
-SCREENSHOTS_MOUNT_ARGS=()
-DESKTOP_SCREENSHOTS_MOUNT_ARGS=()
-if [ -n "${CODEX_SCREENSHOTS_DIR:-}" ]; then
-  if [ -d "${CODEX_SCREENSHOTS_DIR}" ]; then
-    SCREENSHOTS_MOUNT_ARGS=(-v "${CODEX_SCREENSHOTS_DIR}:/screenshots:ro")
-  else
-    echo "[sb] WARNING: CODEX_SCREENSHOTS_DIR does not exist: ${CODEX_SCREENSHOTS_DIR}. Skipping mount." >&2
-  fi
-fi
-
-# Additionally, mount the common macOS screenshots folder (if present) as read-only.
-# This is useful when screenshots are saved to: ~/Desktop/screenshots
-DESKTOP_SCREENSHOTS_DIR="${HOME}/Desktop/screenshots"
-if [ -d "${DESKTOP_SCREENSHOTS_DIR}" ]; then
-  DESKTOP_SCREENSHOTS_MOUNT_ARGS=(-v "${DESKTOP_SCREENSHOTS_DIR}:/host-screenshots:ro")
+# Always mount screenshots from the host as read-only at /screenshots.
+# Override the host source dir with CODEX_SCREENSHOTS_DIR if you need a different path.
+DEFAULT_SCREENSHOTS_DIR="${HOME}/Desktop/screenshots"
+SCREENSHOTS_DIR="${CODEX_SCREENSHOTS_DIR:-$DEFAULT_SCREENSHOTS_DIR}"
+if [ ! -d "${SCREENSHOTS_DIR}" ]; then
+  echo "[sb] ERROR: screenshots directory does not exist: ${SCREENSHOTS_DIR}" >&2
+  echo "     Create it: mkdir -p \"${DEFAULT_SCREENSHOTS_DIR}\"" >&2
+  exit 1
 fi
 
 # ----------------------------
 # 2.6) Log mounted volumes (short)
 # ----------------------------
-VOLUMES_SUMMARY=(
-  "$PWD:/workspace"
-  "$HOME/.ssh/id_ed25519_github_new:/root/.ssh/id_ed25519_github_new:ro"
-  "$HOME/.ssh/id_ed25519_github_new.pub:/root/.ssh/id_ed25519_github_new.pub:ro"
-  "$HOME/.ssh-codex/known_hosts:/root/.ssh/known_hosts"
-  "$HOME/.gitconfig:/root/.gitconfig.host:ro"
-  "$HOME/.codex:/root/.codex"
-  "codex_home:/root"
-  "codex_cache:/root/.cache"
-)
-if [ -n "${CODEX_SCREENSHOTS_DIR:-}" ] && [ -d "${CODEX_SCREENSHOTS_DIR}" ]; then
-  VOLUMES_SUMMARY+=("${CODEX_SCREENSHOTS_DIR}:/screenshots:ro")
-fi
-if [ -d "${DESKTOP_SCREENSHOTS_DIR}" ]; then
-  VOLUMES_SUMMARY+=("${DESKTOP_SCREENSHOTS_DIR}:/host-screenshots:ro")
-fi
-VOLUMES_LINE="$(IFS=', '; echo "${VOLUMES_SUMMARY[*]}")"
-echo "[sb] Volumes: ${VOLUMES_LINE}"
+abbrev_path() {
+  local p="$1"
+  if [[ "$p" == "$HOME"/* ]]; then
+    echo "~${p#"$HOME"}"
+  else
+    echo "…/$(basename "$p")"
+  fi
+}
+
+WORKSPACE_LABEL="$(basename "$PWD")"
+SCREENSHOTS_LABEL="$(abbrev_path "$SCREENSHOTS_DIR")"
+echo "[sb] Volumes: ${WORKSPACE_LABEL} -> /workspace, ${SCREENSHOTS_LABEL}:ro -> /screenshots, ~/.ssh/id_ed25519_github_new:ro -> /root/.ssh/id_ed25519_github_new, ~/.ssh/id_ed25519_github_new.pub:ro -> /root/.ssh/id_ed25519_github_new.pub, ~/.ssh-codex/known_hosts -> /root/.ssh/known_hosts, ~/.gitconfig:ro -> /root/.gitconfig.host, ~/.codex -> /root/.codex, codex_home -> /root, codex_cache -> /root/.cache"
 
 docker run --rm -it \
   --init \
@@ -237,8 +224,7 @@ docker run --rm -it \
   -e GITHUB_PERSONAL_ACCESS_TOKEN \
   -e HOME=/root \
   -v "$PWD:/workspace" \
-  "${SCREENSHOTS_MOUNT_ARGS[@]-}" \
-  "${DESKTOP_SCREENSHOTS_MOUNT_ARGS[@]-}" \
+  -v "${SCREENSHOTS_DIR}:/screenshots:ro" \
   -w /workspace \
   -v "$HOME/.ssh/id_ed25519_github_new:/root/.ssh/id_ed25519_github_new:ro" \
   -v "$HOME/.ssh/id_ed25519_github_new.pub:/root/.ssh/id_ed25519_github_new.pub:ro" \
