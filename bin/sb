@@ -184,7 +184,6 @@ SCREENSHOTS_MOUNT_ARGS=()
 DESKTOP_SCREENSHOTS_MOUNT_ARGS=()
 if [ -n "${CODEX_SCREENSHOTS_DIR:-}" ]; then
   if [ -d "${CODEX_SCREENSHOTS_DIR}" ]; then
-    echo "[sb] Mounting screenshots: ${CODEX_SCREENSHOTS_DIR} -> /screenshots (read-only)"
     SCREENSHOTS_MOUNT_ARGS=(-v "${CODEX_SCREENSHOTS_DIR}:/screenshots:ro")
   else
     echo "[sb] WARNING: CODEX_SCREENSHOTS_DIR does not exist: ${CODEX_SCREENSHOTS_DIR}. Skipping mount." >&2
@@ -195,9 +194,30 @@ fi
 # This is useful when screenshots are saved to: ~/Desktop/screenshots
 DESKTOP_SCREENSHOTS_DIR="${HOME}/Desktop/screenshots"
 if [ -d "${DESKTOP_SCREENSHOTS_DIR}" ]; then
-  echo "[sb] Mounting desktop screenshots: ${DESKTOP_SCREENSHOTS_DIR} -> /host-screenshots (read-only)"
   DESKTOP_SCREENSHOTS_MOUNT_ARGS=(-v "${DESKTOP_SCREENSHOTS_DIR}:/host-screenshots:ro")
 fi
+
+# ----------------------------
+# 2.6) Log mounted volumes (short)
+# ----------------------------
+VOLUMES_SUMMARY=(
+  "$PWD:/workspace"
+  "$HOME/.ssh/id_ed25519_github_new:/root/.ssh/id_ed25519_github_new:ro"
+  "$HOME/.ssh/id_ed25519_github_new.pub:/root/.ssh/id_ed25519_github_new.pub:ro"
+  "$HOME/.ssh-codex/known_hosts:/root/.ssh/known_hosts"
+  "$HOME/.gitconfig:/root/.gitconfig.host:ro"
+  "$HOME/.codex:/root/.codex"
+  "codex_home:/root"
+  "codex_cache:/root/.cache"
+)
+if [ -n "${CODEX_SCREENSHOTS_DIR:-}" ] && [ -d "${CODEX_SCREENSHOTS_DIR}" ]; then
+  VOLUMES_SUMMARY+=("${CODEX_SCREENSHOTS_DIR}:/screenshots:ro")
+fi
+if [ -d "${DESKTOP_SCREENSHOTS_DIR}" ]; then
+  VOLUMES_SUMMARY+=("${DESKTOP_SCREENSHOTS_DIR}:/host-screenshots:ro")
+fi
+VOLUMES_LINE="$(IFS=', '; echo "${VOLUMES_SUMMARY[*]}")"
+echo "[sb] Volumes: ${VOLUMES_LINE}"
 
 docker run --rm -it \
   --init \
