@@ -81,6 +81,15 @@ if [ -z "${GITHUB_PERSONAL_ACCESS_TOKEN:-}" ]; then
 fi
 
 # ----------------------------
+# 0.2) Sanity check: GitHub username (optional)
+# ----------------------------
+# If you export GITHUB_USERNAME in your shell (e.g. ~/.zshrc), we pass it into the container.
+if [ -z "${GITHUB_USERNAME:-}" ]; then
+  echo "[sb] NOTE: GITHUB_USERNAME is not set in the host shell."
+  echo "     If you want it available inside the sandbox, export GITHUB_USERNAME=... and re-run."
+fi
+
+# ----------------------------
 # 1) Monitoreo de espacio
 # ----------------------------
 # This can be slow on some Docker setups. Skip with: SB_SKIP_DOCKER_DF=1
@@ -221,6 +230,7 @@ docker run --rm -it \
   -p "${HOST_PORT_8000}:8000" \
   -p "${HOST_PORT_8080}:8080" \
   -e OPENAI_ALLOWED_DOMAINS \
+  -e GITHUB_USERNAME \
   -e GITHUB_PERSONAL_ACCESS_TOKEN \
   -e HOME=/root \
   -v "$PWD:/workspace" \
