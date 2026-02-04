@@ -184,15 +184,15 @@ After the A–F lines, you MUST include meta-options in **one single line** exac
 ### 5) End-of-round answer instruction (mandatory)
 At the end of the round, you MUST instruct the user:
 
-- `Responde en UNA sola línea con pares separados por comas: Q0=..., Q1=..., ...`
+- `Respond in ONE single line with comma-separated pairs: Q0=..., Q1=..., ...`
 
 And you MUST clarify the free-text case:
 
-- `Para texto libre: Q0=E: <tu-texto>`
+- `For free text: Q0=E: <your-text>`
 
 You MUST also include a short exact example (minimum):
 
-- `Ejemplo: Q0=E: voice-agent-mvp, Q1=A`
+- `Example: Q0=E: voice-agent-mvp, Q1=A`
 
 ### Answer format requirement (strict)
 
@@ -209,9 +209,11 @@ At the end of each round, you MUST require answers in **ONE single line**, using
 - A space after comma is optional: `Q1=A,Q2=B` is valid.
 - Letter choices are **case-insensitive** (A/a are equivalent).
 - For `E) Other`, the format MUST be: `Qn=E: <free text>`
-- For meta-options, the format MUST be: `Qn=G` or `Qn=H: A vs C` etc.
+- For Meta-options `G/H/I/J` are VALID answers (helper requests) and MUST follow the procedure in THIS DOCUMENT under the heading `## Step 1G — Meta-option handling (mandatory)`.
 
 If the user does not comply, politely ask them to resend using the exact format.
+
+Compliance note: `Qn=G/H/I/J` counts as compliant input (helper mode), not a formatting error.
 
 ## Step 1A — Constraints-first ordering (reduce confusion)
 
@@ -284,6 +286,29 @@ Deferral is allowed, but must be managed:
   - add it to **Open Questions** with a specific label,
   - describe the consequence of deferring (what in PLAN is blocked or becomes more expensive),
   - add a “Default if not decided” fallback (only if safe), clearly marked as provisional.
+
+## Step 1G — Meta-option handling (mandatory)
+
+Meta-options `G/H/I/J` are VALID answers. They are helper requests and DO NOT finalize the decision for the question.
+
+When the user answers `Qn=G/H/I/J`, you MUST:
+
+1) Provide ONLY the requested helper content for that SAME question:
+   - G) Explain: briefly define what each A–F option means and when to use it.
+   - H) Compare: compare the relevant options using the fixed rubric (Step 1D).
+   - I) Recommend: recommend one option, state assumptions, and what would change the recommendation.
+   - J) Show examples: provide 2–4 concrete examples for each of A–D.
+
+2) Then immediately re-ask ONLY that SAME question `Qn` using the exact standard format (Q header + A–F lines + meta-options line).
+
+3) Invite either a final decision (A–F) OR another meta-option (G/H/I/J) if they still need help.
+Use this exact instruction line:
+- `Answer in ONE line: Qn=A/B/C/D/E: <text>/F OR Qn=G/H/I/J`
+
+Hard rules:
+- You MUST NOT call `Qn=G/H/I/J` “invalid” or “not valid”.
+- If the user answers another meta-option for the same `Qn`, repeat Step 1G for that `Qn` (helper output → re-ask `Qn`) until they choose A–F.
+- After a meta-option, do NOT demand answers for other questions—only re-ask `Qn`.
 
 ---
 
@@ -528,4 +553,3 @@ Avoid obvious questions. Favor:
 - Do not implement code.
 - Do not propose “final architecture” until constraints are captured.
 - When uncertain, ask; do not assume.
-
