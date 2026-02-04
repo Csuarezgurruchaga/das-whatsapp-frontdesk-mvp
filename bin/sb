@@ -237,8 +237,8 @@ docker run --rm -it \
   -e GITHUB_PERSONAL_ACCESS_TOKEN \
   -e HOME=/root \
   -v "$PWD:/workspace" \
-  "${SCREENSHOTS_MOUNT_ARGS[@]}" \
-  "${DESKTOP_SCREENSHOTS_MOUNT_ARGS[@]}" \
+  "${SCREENSHOTS_MOUNT_ARGS[@]-}" \
+  "${DESKTOP_SCREENSHOTS_MOUNT_ARGS[@]-}" \
   -w /workspace \
   -v "$HOME/.ssh/id_ed25519_github_new:/root/.ssh/id_ed25519_github_new:ro" \
   -v "$HOME/.ssh/id_ed25519_github_new.pub:/root/.ssh/id_ed25519_github_new.pub:ro" \
