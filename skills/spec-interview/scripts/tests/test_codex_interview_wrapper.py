@@ -1,6 +1,11 @@
+import fcntl
 import importlib.util
+import os
 import pathlib
+import pty
+import subprocess
 import sys
+import time
 import unittest
 
 
@@ -364,6 +369,107 @@ class TestRoundBuffer(unittest.TestCase):
         preferred = rb.preferred_lines(recent)
         self.assertGreaterEqual(len(preferred), len(recent))
         self.assertTrue(any("Q0 —" in ln for ln in preferred))
+
+
+class TestReadCodexUntilResend(unittest.TestCase):
+    def _spawn_delayed_output_child(self, slave_fd: int) -> subprocess.Popen:
+        # Emulates a "slow" assistant: the PTY will echo user input immediately (ECHO),
+        # but actual output arrives later in two chunks with a gap > default settle_sec.
+        code = r"""
+import sys
+import time
+
+def w(s: str) -> None:
+    sys.stdout.write(s)
+    sys.stdout.flush()
+
+while True:
+    line = sys.stdin.readline()
+    if not line:
+        break
+    # Sleep longer than the wrapper's typical settle_sec to reproduce early-return.
+    time.sleep(0.45)
+    w("help: " + line.strip() + "\n")
+    time.sleep(0.45)
+    w("Please resend the round answers (format reminder: Q1=A, Q2=B)\n")
+"""
+        return subprocess.Popen(
+            [sys.executable, "-u", "-c", code],
+            stdin=slave_fd,
+            stdout=slave_fd,
+            stderr=slave_fd,
+            close_fds=True,
+            start_new_session=True,
+        )
+
+    @staticmethod
+    def _read_available_nonblocking(fd: int) -> bytes:
+        # Best-effort: read whatever is immediately available without blocking.
+        orig_flags = fcntl.fcntl(fd, fcntl.F_GETFL)
+        try:
+            fcntl.fcntl(fd, fcntl.F_SETFL, orig_flags | os.O_NONBLOCK)
+            try:
+                return os.read(fd, 4096)
+            except BlockingIOError:
+                return b""
+        finally:
+            fcntl.fcntl(fd, fcntl.F_SETFL, orig_flags)
+
+    def test_meta_read_does_not_return_on_echo_only(self):
+        master_fd, slave_fd = pty.openpty()
+        proc = self._spawn_delayed_output_child(slave_fd)
+        os.close(slave_fd)
+        try:
+            meta_line = "Q1=I"
+
+            # Reproduce the user flow: send the same meta request twice.
+            for _ in range(2):
+                WRAP._send_enter(master_fd, meta_line)
+                lines, _raw = WRAP._read_codex_until_resend(
+                    master_fd,
+                    settle_sec=0.35,
+                    max_sec=3.0,
+                    debug=False,
+                    require_resend=False,
+                    ignore_line_prefix=meta_line,
+                    quiet_after_sec=1.0,
+                )
+                self.assertTrue(any("help:" in ln for ln in lines), lines)
+                self.assertTrue(
+                    any("format reminder" in ln.lower() for ln in lines),
+                    lines,
+                )
+
+                # If the reader returns too early, the delayed chunks would still be pending.
+                time.sleep(0.2)
+                pending = self._read_available_nonblocking(master_fd)
+                self.assertEqual(pending, b"")
+        finally:
+            proc.terminate()
+            try:
+                proc.wait(timeout=2)
+            except Exception:
+                proc.kill()
+            try:
+                os.close(master_fd)
+            except Exception:
+                pass
+
+
+class TestReopenShortcut(unittest.TestCase):
+    def test_consume_reopen_shortcut_when_reopen_available(self):
+        requested, remaining = WRAP._consume_reopen_shortcut(
+            b"\x0fhello\r", can_reopen=True
+        )
+        self.assertTrue(requested)
+        self.assertEqual(remaining, b"hello\r")
+
+    def test_consume_reopen_shortcut_ignored_when_reopen_not_available(self):
+        requested, remaining = WRAP._consume_reopen_shortcut(
+            b"\x0fhello\r", can_reopen=False
+        )
+        self.assertFalse(requested)
+        self.assertEqual(remaining, b"\x0fhello\r")
 
 
 if __name__ == "__main__":

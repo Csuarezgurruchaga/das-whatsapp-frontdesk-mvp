@@ -236,6 +236,7 @@ class UserCanceled(Exception):
 
 _ENTER_KEYS = {10, 13, curses.KEY_ENTER, curses.ascii.NL}
 _META_LETTERS = {"G", "H", "I", "J"}
+_REOPEN_UI_KEY = 15  # Ctrl+O
 
 
 def _drain_extra_enter_keys(win) -> None:
@@ -275,6 +276,26 @@ def _drain_extra_enter_keys(win) -> None:
             break
     finally:
         win.nodelay(False)
+
+
+def _consume_reopen_shortcut(data: bytes, *, can_reopen: bool) -> tuple[bool, bytes]:
+    """
+    Detect and remove the "reopen batch UI" shortcut from raw stdin bytes.
+
+    Returns:
+      (reopen_requested, remaining_bytes_to_forward)
+    """
+    if not can_reopen or not data:
+        return False, data
+
+    reopen_requested = False
+    out = bytearray()
+    for b in data:
+        if b == _REOPEN_UI_KEY:
+            reopen_requested = True
+            continue
+        out.append(b)
+    return reopen_requested, bytes(out)
 
 
 def _dedupe_options(options: list[Option]) -> list[Option]:
@@ -539,6 +560,8 @@ def _read_codex_until_resend(
     max_sec: float = 25.0,
     debug: bool = False,
     require_resend: bool = True,
+    ignore_line_prefix: str | None = None,
+    quiet_after_sec: float | None = None,
 ) -> tuple[list[str], str]:
     """
     Read from the child PTY (master_fd) until we detect a "resend answers" prompt,
@@ -554,6 +577,7 @@ def _read_codex_until_resend(
     last_data = started
     saw_resend = False
     saw_any = False
+    effective_lines = 0
 
     raw_parts: list[str] = []
     stripped_lines: list[str] = []
@@ -570,11 +594,12 @@ def _read_codex_until_resend(
             timeout = 0.1
             events = sel.select(timeout=timeout)
             if not events:
+                quiet_needed = quiet_after_sec if quiet_after_sec is not None else settle_sec
                 if require_resend:
                     if saw_resend and (time.time() - last_data) >= settle_sec:
                         break
                 else:
-                    if saw_any and (time.time() - last_data) >= settle_sec:
+                    if saw_any and (time.time() - last_data) >= quiet_needed:
                         break
                 continue
 
@@ -596,15 +621,26 @@ def _read_codex_until_resend(
                         line, partial = partial.split("\n", 1)
                         if not line.strip():
                             continue
+                        if ignore_line_prefix:
+                            s = line.strip()
+                            if s.startswith(ignore_line_prefix):
+                                # Skip echoes / status repaints for the line we just sent,
+                                # so we don't treat them as "real content" and return too early.
+                                continue
                         stripped_lines.append(line)
+                        effective_lines += 1
                         if RESEND_PROMPT_RE.search(line):
                             saw_resend = True
+            if ignore_line_prefix:
+                saw_any = effective_lines > 0
     finally:
         _restore_flags(master_fd, orig_flags)
 
     # Flush any trailing partial line
     if partial.strip():
-        stripped_lines.append(partial.strip())
+        tail = partial.strip()
+        if not (ignore_line_prefix and tail.startswith(ignore_line_prefix)):
+            stripped_lines.append(tail)
 
     return stripped_lines, "".join(raw_parts)
 
@@ -1125,6 +1161,8 @@ def _curses_help_and_answer(
             max_sec=25.0,
             debug=debug,
             require_resend=False,
+            ignore_line_prefix=meta_line,
+            quiet_after_sec=max(settle_sec, 1.0),
         )
         help_lines.extend(lines)
         # While Codex is producing the meta/help response, users often press Enter to "continue".
@@ -1661,7 +1699,8 @@ def run_interactive(
 ) -> int:
     shell_flag = "-lc" if login_shell else "-c"
     full_cmd = f"{shell} {shell_flag} {cmd!r}"
-    print(f"[wrapper] spawn: {full_cmd}", file=sys.stderr)
+    if os.environ.get("CODEX_WRAPPER_SPAWN_LOG") == "1":
+        print(f"[wrapper] spawn: {full_cmd}", file=sys.stderr)
     pid, master_fd = pty.fork()
     if pid == 0:
         os.execvp(shell, [shell, shell_flag, cmd])
@@ -1725,6 +1764,8 @@ def run_interactive(
     suppress_qref_fallback = False
     saw_resend_prompt = False
     last_batch: Batch | None = None
+    dismissed_batch: Batch | None = None
+    reopen_batch_requested = False
     last_user_input_time = 0.0
     # Some terminals deliver Enter as multiple events (CRLF) and/or leave a stray
     # newline in the input buffer when a curses Textbox is submitted. If we
@@ -1780,6 +1821,14 @@ def run_interactive(
                     data = os.read(sys.stdin.fileno(), 1024)
                     if not data:
                         continue
+                    requested, data = _consume_reopen_shortcut(
+                        data, can_reopen=(dismissed_batch is not None)
+                    )
+                    if requested:
+                        reopen_batch_requested = True
+                        log("[wrapper] reopen shortcut requested (Ctrl+O)")
+                    if not data:
+                        continue
                     last_user_input_time = time.time()
                     if last_user_input_time < suppress_stdin_newline_until:
                         # Drop only pure CR/LF sequences; never drop real input.
@@ -1799,8 +1848,20 @@ def run_interactive(
                 allow_qref_fallback=not suppress_qref_fallback,
             )
             reused_last_batch = False
+            forced_reopen = False
             if not batch:
+                if reopen_batch_requested and dismissed_batch is not None:
+                    batch = dismissed_batch
+                    reused_last_batch = True
+                    forced_reopen = True
+                    reopen_batch_requested = False
+                    log(
+                        f"[wrapper] reopening dismissed batch "
+                        f"qids={[q.qid for q in batch.questions]}"
+                    )
                 if (
+                    not batch
+                    and
                     saw_resend_prompt
                     and last_batch is not None
                     and now - last_output_time >= settle_sec
@@ -1814,12 +1875,15 @@ def run_interactive(
                     )
                 else:
                     continue
+            elif dismissed_batch is not None and dismissed_batch.signature != batch.signature:
+                # A newly parsed batch supersedes any previously dismissed one.
+                dismissed_batch = None
             # If we can parse proper "Qn — ..." headers again, we can safely re-enable
             # the Q-ref fallback mode (it was only suppressed to avoid meta-help prose).
             if suppress_qref_fallback and any(Q_LINE_RE.match(ln) for ln in parse_lines[-50:]):
                 suppress_qref_fallback = False
             quiet_for = now - last_output_time
-            if not reused_last_batch:
+            if not reused_last_batch and not forced_reopen:
                 ok, reason = _batch_completeness_gate(
                     parse_lines,
                     quiet_for=quiet_for,
@@ -1888,6 +1952,8 @@ def run_interactive(
                                         max_sec=25.0,
                                         debug=debug,
                                         require_resend=False,
+                                        ignore_line_prefix=meta_line,
+                                        quiet_after_sec=max(settle_sec, 1.0),
                                     )
                                     if raw:
                                         sys.stdout.write(raw)
@@ -1920,12 +1986,18 @@ def run_interactive(
                         # That prose often contains "Qn=..." instructions and bullet options,
                         # which our fallback parser can mistakenly treat as a new batch.
                         suppress_qref_fallback = bool(re.search(r"\bQ\d+\s*=\s*[GHIJ]\b", line))
+                        dismissed_batch = None
                         recent.clear()
                         round_buf.reset()
                         partial = ""
                         active_sig = None
             except UserCanceled:
                 log("[wrapper] canceled by user")
+                dismissed_batch = batch
+                print(
+                    "[wrapper] UI cerrada. Presioná Ctrl+O para reabrir el último batch.",
+                    file=sys.stderr,
+                )
                 # Suppress any stray Enter that immediately follows closing our UI.
                 suppress_stdin_newline_until = time.time() + 0.35
                 # Ensure any buffered question text doesn't immediately re-trigger.

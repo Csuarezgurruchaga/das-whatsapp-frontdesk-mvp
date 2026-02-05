@@ -213,7 +213,7 @@ abbrev_path() {
 
 WORKSPACE_LABEL="$(basename "$PWD")"
 SCREENSHOTS_LABEL="$(abbrev_path "$SCREENSHOTS_DIR")"
-echo "[sb] Volumes: ${WORKSPACE_LABEL} -> /workspace, ${SCREENSHOTS_LABEL}:ro -> /screenshots, ~/.ssh/id_ed25519_github_new:ro -> /root/.ssh/id_ed25519_github_new, ~/.ssh/id_ed25519_github_new.pub:ro -> /root/.ssh/id_ed25519_github_new.pub, ~/.ssh-codex/known_hosts -> /root/.ssh/known_hosts, ~/.gitconfig:ro -> /root/.gitconfig.host, ~/.codex -> /root/.codex, codex_home -> /root, codex_cache -> /root/.cache"
+echo "[sb] Volumes: ${WORKSPACE_LABEL} -> /workspace, ${SCREENSHOTS_LABEL}:ro -> /screenshots, ${SCREENSHOTS_LABEL}:ro -> /root/Desktop/screenshots, ~/.ssh/id_ed25519_github_new:ro -> /root/.ssh/id_ed25519_github_new, ~/.ssh/id_ed25519_github_new.pub:ro -> /root/.ssh/id_ed25519_github_new.pub, ~/.ssh-codex/known_hosts -> /root/.ssh/known_hosts, ~/.gitconfig:ro -> /root/.gitconfig.host, ~/.codex -> /root/.codex, codex_home -> /root, codex_cache -> /root/.cache"
 
 docker run --rm -it \
   --init \
@@ -235,6 +235,7 @@ docker run --rm -it \
   -e HOME=/root \
   -v "$PWD:/workspace" \
   -v "${SCREENSHOTS_DIR}:/screenshots:ro" \
+  -v "${SCREENSHOTS_DIR}:/root/Desktop/screenshots:ro" \
   -w /workspace \
   -v "$HOME/.ssh/id_ed25519_github_new:/root/.ssh/id_ed25519_github_new:ro" \
   -v "$HOME/.ssh/id_ed25519_github_new.pub:/root/.ssh/id_ed25519_github_new.pub:ro" \
