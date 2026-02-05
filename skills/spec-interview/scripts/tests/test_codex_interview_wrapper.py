@@ -201,6 +201,13 @@ continuidad visual entre tablero y subtareas, manteniendo el detalle operativo.
 B) Quitar semáforo y usar solo estados Kanban — Qué es: un único eje de seguimiento.
 """.strip()
 
+SAMPLE_INLINE_CHROME_NOISE = """
+Q8 — Nombres IT para los 3 estados de subtarea (estructura tipo opción B)Drafting structured questions in Spanish(0s • esc to interrupt)Write tests for
+A) To Do → In Progress → Done — Qué es: nomenclatura estándar de ingeniería; Cuándo usar: si querés máxima familiaridad universal.
+Drafting structured questions in Spanish(0s • esc to interrupt)
+B) Backlog → Doing → Done — Qué es: versión Kanban breve.
+""".strip()
+
 
 class TestParseBatch(unittest.TestCase):
     def test_parse_batch_extracts_questions_and_inline_options(self):
@@ -290,6 +297,16 @@ class TestParseBatch(unittest.TestCase):
         q6 = batch.questions[0]
         opt_a = next(o for o in q6.options if o.letter == "A")
         self.assertIn("continuidad visual entre tablero y subtareas", opt_a.label)
+
+    def test_parse_batch_strips_inline_chrome_noise(self):
+        lines = [ln.rstrip() for ln in SAMPLE_INLINE_CHROME_NOISE.splitlines()]
+        batch = WRAP.parse_batch(lines, max_lookback=50)
+        self.assertIsNotNone(batch)
+        q8 = batch.questions[0]
+        self.assertNotIn("Drafting structured questions", q8.title)
+        opt_a = next(o for o in q8.options if o.letter == "A")
+        self.assertNotIn("Drafting structured questions", opt_a.label)
+        self.assertNotIn("esc to interrupt", opt_a.label)
 
     def test_parse_batch_rejects_qn_without_options(self):
         lines = [ln.rstrip() for ln in SAMPLE_Q_ONLY.splitlines()]

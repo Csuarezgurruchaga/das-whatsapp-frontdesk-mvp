@@ -52,6 +52,18 @@ META_FALLBACK_LABELS: dict[str, str] = {
 CODEX_CHROME_RE = re.compile(
     r"(?:\bcontext left\b|\bfor shortcuts\b|\bWorking\(|\bCode mode\b)", re.IGNORECASE
 )
+INLINE_CHROME_CUT_RE = re.compile(
+    r"(?:"
+    r"\bDrafting structured questions\b"
+    r"|\bWrite tests for\b"
+    r"|\bcontext left\b"
+    r"|\bfor shortcuts\b"
+    r"|\bWorking\("
+    r"|\bCode mode\b"
+    r"|esc to interrupt"
+    r")",
+    re.IGNORECASE,
+)
 RESEND_PROMPT_RE = re.compile(
     # The spec-interview skill sometimes asks to re-send the round answers after a
     # meta/help response, but wording varies across renderers and languages.
@@ -320,10 +332,20 @@ def _compact_label(label: str, max_chars: int) -> str:
     return single[: max_chars - 3].rstrip() + "..."
 
 
+def _strip_inline_chrome(line: str) -> str:
+    """Drop known Codex status/chrome fragments injected into content lines."""
+    m = INLINE_CHROME_CUT_RE.search(line)
+    if not m:
+        return line
+    return line[: m.start()].rstrip()
+
+
 def _is_option_continuation_line(line: str) -> bool:
     """Best-effort heuristic for wrapped option-label continuations."""
     stripped = line.strip()
     if not stripped:
+        return False
+    if CODEX_CHROME_RE.search(stripped) or INLINE_CHROME_CUT_RE.search(stripped):
         return False
     if Q_LINE_RE.match(line):
         return False
@@ -334,6 +356,8 @@ def _is_option_continuation_line(line: str) -> bool:
     if ANSWER_INSTRUCTION_RE.search(line):
         return False
     if RESEND_PROMPT_RE.search(line):
+        return False
+    if not re.match(r"^[a-záéíóúñü¿¡\"'(\[]", stripped, re.IGNORECASE):
         return False
     return True
 
@@ -400,7 +424,12 @@ def parse_batch(
     if not lines:
         return None
 
-    window = lines[-max_lookback:]
+    window_raw = lines[-max_lookback:]
+    window: list[str] = []
+    for line in window_raw:
+        cleaned = _strip_inline_chrome(line)
+        if cleaned.strip():
+            window.append(cleaned)
 
     q_indexes: list[int] = []
     for idx, line in enumerate(window):
@@ -1829,6 +1858,9 @@ def run_interactive(
                         while "\n" in partial:
                             line, partial = partial.split("\n", 1)
                             if line.strip():
+                                line = _strip_inline_chrome(line)
+                                if not line.strip():
+                                    continue
                                 # Avoid polluting the parser buffer with Codex chrome/status lines
                                 # (these frequently repaint and can get interleaved with prompts).
                                 if CODEX_CHROME_RE.search(line):
