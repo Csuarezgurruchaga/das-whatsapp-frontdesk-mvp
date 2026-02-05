@@ -194,6 +194,13 @@ Q0 — Foo
 Please resend the round answers (format reminder: Q0=A, Q1=B)
 """.strip()
 
+SAMPLE_WRAPPED_OPTION_CONTINUATION = """
+Q6 — Priorización visual en el nuevo tablero
+A) Mantener semáforo en tarea principal + subtareas por estado — Qué es: color de urgencia + flujo Kanban; Cuándo usar: si querés
+continuidad visual entre tablero y subtareas, manteniendo el detalle operativo.
+B) Quitar semáforo y usar solo estados Kanban — Qué es: un único eje de seguimiento.
+""".strip()
+
 
 class TestParseBatch(unittest.TestCase):
     def test_parse_batch_extracts_questions_and_inline_options(self):
@@ -275,6 +282,14 @@ class TestParseBatch(unittest.TestCase):
         self.assertIn("A", letters)
         self.assertIn("B", letters)
         self.assertIn("G", letters)
+
+    def test_parse_batch_merges_wrapped_option_continuations(self):
+        lines = [ln.rstrip() for ln in SAMPLE_WRAPPED_OPTION_CONTINUATION.splitlines()]
+        batch = WRAP.parse_batch(lines, max_lookback=50)
+        self.assertIsNotNone(batch)
+        q6 = batch.questions[0]
+        opt_a = next(o for o in q6.options if o.letter == "A")
+        self.assertIn("continuidad visual entre tablero y subtareas", opt_a.label)
 
     def test_parse_batch_rejects_qn_without_options(self):
         lines = [ln.rstrip() for ln in SAMPLE_Q_ONLY.splitlines()]
