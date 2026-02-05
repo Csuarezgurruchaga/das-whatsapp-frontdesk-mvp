@@ -402,6 +402,71 @@ while True:
             start_new_session=True,
         )
 
+    def _spawn_noisy_meta_child(self, slave_fd: int) -> subprocess.Popen:
+        # Emulates a renderer that repaints status lines using CR + ANSI escapes
+        # before printing the actual meta/help response and resend prompt.
+        code = r"""
+import sys
+import time
+
+def w(s: str) -> None:
+    sys.stdout.write(s)
+    sys.stdout.flush()
+
+while True:
+    line = sys.stdin.readline()
+    if not line:
+        break
+    # status repaint noise + ANSI (cursor hide/show) + carriage-return rewrites
+    w("\x1b[?25lWorking...\r")
+    time.sleep(0.12)
+    w("Working... 60%\r")
+    time.sleep(0.12)
+    w("\x1b[?25h")
+    # actual help response in multiple lines
+    w("helper: option I usually optimizes for speed.\n")
+    time.sleep(0.2)
+    w("helper: choose A if you need reliability first.\n")
+    time.sleep(0.2)
+    w("Please resend the round answers (format reminder: Q1=A, Q2=B)\n")
+"""
+        return subprocess.Popen(
+            [sys.executable, "-u", "-c", code],
+            stdin=slave_fd,
+            stdout=slave_fd,
+            stderr=slave_fd,
+            close_fds=True,
+            start_new_session=True,
+        )
+
+    def _spawn_meta_router_child(self, slave_fd: int) -> subprocess.Popen:
+        # Echoes which meta line was received, then asks to resend round answers.
+        code = r"""
+import sys
+import time
+
+def w(s: str) -> None:
+    sys.stdout.write(s)
+    sys.stdout.flush()
+
+while True:
+    line = sys.stdin.readline()
+    if not line:
+        break
+    cmd = line.strip()
+    w("meta handled: " + cmd + "\n")
+    time.sleep(0.1)
+    w("Please resend the round answers (format reminder: Q1=A, Q2=B)\n")
+"""
+        return subprocess.Popen(
+            [sys.executable, "-u", "-c", code],
+            stdin=slave_fd,
+            stdout=slave_fd,
+            stderr=slave_fd,
+            close_fds=True,
+            start_new_session=True,
+        )
+
     @staticmethod
     def _read_available_nonblocking(fd: int) -> bytes:
         # Best-effort: read whatever is immediately available without blocking.
@@ -455,6 +520,76 @@ while True:
             except Exception:
                 pass
 
+    def test_meta_read_tolerates_ansi_and_repaints(self):
+        master_fd, slave_fd = pty.openpty()
+        proc = self._spawn_noisy_meta_child(slave_fd)
+        os.close(slave_fd)
+        try:
+            meta_line = "Q1=I"
+            WRAP._send_enter(master_fd, meta_line)
+            lines, raw = WRAP._read_codex_until_resend(
+                master_fd,
+                settle_sec=0.35,
+                max_sec=3.0,
+                debug=False,
+                require_resend=False,
+                ignore_line_prefix=meta_line,
+                quiet_after_sec=1.0,
+            )
+            joined = "\n".join(lines).lower()
+            self.assertIn("helper: option i", joined)
+            self.assertIn("helper: choose a", joined)
+            self.assertIn("format reminder", joined)
+            # Ensure the prompt echo is not considered effective content.
+            self.assertFalse(any(ln.strip().startswith(meta_line) for ln in lines), lines)
+            # Raw output can still contain ANSI; cleaned lines above must not depend on it.
+            self.assertIn("Working", raw)
+        finally:
+            proc.terminate()
+            try:
+                proc.wait(timeout=2)
+            except Exception:
+                proc.kill()
+            try:
+                os.close(master_fd)
+            except Exception:
+                pass
+
+    def test_meta_options_g_h_i_j_roundtrip(self):
+        master_fd, slave_fd = pty.openpty()
+        proc = self._spawn_meta_router_child(slave_fd)
+        os.close(slave_fd)
+        try:
+            meta_lines = [
+                WRAP.build_pair("Q1", "G"),
+                WRAP.build_pair("Q1", "H", "A vs C"),
+                WRAP.build_pair("Q1", "I"),
+                WRAP.build_pair("Q1", "J"),
+            ]
+            for meta_line in meta_lines:
+                WRAP._send_enter(master_fd, meta_line)
+                lines, _raw = WRAP._read_codex_until_resend(
+                    master_fd,
+                    settle_sec=0.35,
+                    max_sec=3.0,
+                    debug=False,
+                    require_resend=False,
+                    ignore_line_prefix=meta_line,
+                    quiet_after_sec=1.0,
+                )
+                joined = "\n".join(lines)
+                self.assertIn(f"meta handled: {meta_line}", joined)
+                self.assertIn("format reminder", joined.lower())
+        finally:
+            proc.terminate()
+            try:
+                proc.wait(timeout=2)
+            except Exception:
+                proc.kill()
+            try:
+                os.close(master_fd)
+            except Exception:
+                pass
 
 class TestReopenShortcut(unittest.TestCase):
     def test_consume_reopen_shortcut_when_reopen_available(self):
