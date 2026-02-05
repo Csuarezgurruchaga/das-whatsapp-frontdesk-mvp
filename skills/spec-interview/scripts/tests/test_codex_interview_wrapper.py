@@ -382,6 +382,15 @@ class TestDetailViewKeys(unittest.TestCase):
         self.assertIn(ord("D"), WRAP._DETAIL_CLOSE_KEYS)
 
 
+class TestWrapperNoticePayload(unittest.TestCase):
+    def test_payload_clears_line_when_tty(self):
+        msg = "[wrapper] UI cerrada. Presioná Ctrl+O para reabrir el último batch."
+        payload = WRAP._wrapper_notice_payload(msg, is_tty=True)
+        self.assertTrue(payload.startswith("\r\x1b[2K"))
+        self.assertTrue(payload.endswith("\n"))
+        self.assertIn(msg, payload)
+
+
 class TestRoundBuffer(unittest.TestCase):
     def test_round_buffer_prefers_captured_round_over_truncated_recent(self):
         rb = WRAP.RoundBuffer(max_lines=200)
