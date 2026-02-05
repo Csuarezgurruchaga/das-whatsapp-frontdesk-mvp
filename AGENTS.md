@@ -16,7 +16,7 @@
   - `url.git@github.com:.insteadof https://github.com/`
 - SSH to GitHub is blocked in this environment, so pushing must use HTTPS and bypass global config:
   - Use `GIT_CONFIG_GLOBAL=/dev/null`
-  - Use `GIT_ASKPASS` with token from `~/.codex/config.toml` (`mcp_servers.github.env.GITHUB_PERSONAL_ACCESS_TOKEN`)
+  - Use `GIT_ASKPASS` with a token (often available as env `GITHUB_PERSONAL_ACCESS_TOKEN` in Codex; otherwise from `~/.codex/config.toml` under an `env` section)
 
 ## Untracked files to avoid committing
 - `.DS_Store` files
@@ -50,7 +50,11 @@
 - Ngrok testing pattern (optional):
   - Run locally on a fixed port (e.g. `8010`) and expose via `ngrok http <port>`.
   - Dispatcher should forward webhook payloads to `https://<ngrok-host>/webhooks/whatsapp` (note plural `webhooks`).
+- WhatsApp Cloud “number health” gotcha:
+  - A phone can receive WhatsApp messages (two ticks) but still not deliver Cloud webhooks if the Cloud phone verification is not current.
+  - Quick check via Graph: `code_verification_status` should not be `EXPIRED`. If it is, re-verify the number (Graph `/{PHONE_NUMBER_ID}/request_code` + `/{PHONE_NUMBER_ID}/verify_code`, or via WhatsApp Manager UI).
 
 ## Known fixes (2026-02)
 - Enum mapping: MySQL stores `users.role` as `agent/admin` and `message_receipts.status` as `sent/delivered/read/failed`; ORM now maps enums by `.value` to avoid `LookupError`.
 - Session expiry timestamps: MySQL may return naive datetimes; code normalizes to UTC before comparing to `now` (HTTP + WebSocket auth).
+- UI timestamps offset: REST endpoints now normalize conversation/message timestamps to UTC-aware before JSON serialization so the frontend can safely render them in `America/Argentina/Buenos_Aires` without a +3h shift.
