@@ -32,3 +32,25 @@
 - Config artifacts live under `./config/`
 - Default bot YAML path: `./config/bot.yaml` (env `BOT_MENU_YAML_PATH`)
 - Reverse proxy terminates TLS and forwards `X-Forwarded-*` headers
+
+## Local testing notes (WhatsApp + FrontDesk)
+- Runtime dependencies: `requirements.txt` now includes `uvicorn[standard]` so `/realtime/ws` works in local runs (WebSockets).
+- DB: MySQL is required (see SPEC). Typical local DB name: `chatbot_mvp`.
+- Migrations: run `alembic upgrade head` after setting `DATABASE_URL`.
+- Users: there is no “create user” API; seed at least `2` agents + `1` admin in table `users` to log into `/`.
+  - Password hashing helper: `app.security.hash_password()`.
+- Minimal local env vars:
+  - `APP_ENV=development` (easiest for local testing; webhook signature is not required).
+  - `DATABASE_URL` (SQLAlchemy URL, using PyMySQL).
+  - `SESSION_SECRET` (required for sessions).
+  - `BOT_MENU_YAML_PATH` (optional; defaults to `./config/bot.yaml`).
+- WhatsApp end-to-end requires outbound credentials:
+  - `WHATSAPP_ACCESS_TOKEN`, `WHATSAPP_PHONE_NUMBER_ID`.
+  - If running `APP_ENV=staging|production`, also set: `WHATSAPP_VERIFY_TOKEN`, `WHATSAPP_APP_SECRET`.
+- Ngrok testing pattern (optional):
+  - Run locally on a fixed port (e.g. `8010`) and expose via `ngrok http <port>`.
+  - Dispatcher should forward webhook payloads to `https://<ngrok-host>/webhooks/whatsapp` (note plural `webhooks`).
+
+## Known fixes (2026-02)
+- Enum mapping: MySQL stores `users.role` as `agent/admin` and `message_receipts.status` as `sent/delivered/read/failed`; ORM now maps enums by `.value` to avoid `LookupError`.
+- Session expiry timestamps: MySQL may return naive datetimes; code normalizes to UTC before comparing to `now` (HTTP + WebSocket auth).
