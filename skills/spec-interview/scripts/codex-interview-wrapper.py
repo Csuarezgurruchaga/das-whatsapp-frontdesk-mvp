@@ -1044,18 +1044,6 @@ def _curses_draw_batch(
     pending_letter: str | None,
     status_msg: str | None,
 ) -> tuple[int, int, int]:
-    def compute_layout(screen_h: int) -> tuple[int, int, int]:
-        # sep_y is the row where we draw the horizontal separator line.
-        # Top content is [0..sep_y-1], bottom reader starts at sep_y+1.
-        min_top_content = 2  # progress + hints
-        min_bottom = 4
-        sep_y = int(round(screen_h * 0.28))
-        max_sep = max(min_top_content, screen_h - (min_bottom + 1))
-        sep_y = max(min_top_content, min(sep_y, max_sep))
-        bottom_y = min(screen_h - 1, sep_y + 1)
-        bottom_h = max(1, screen_h - bottom_y)
-        return sep_y, bottom_y, bottom_h
-
     def fmt_ans_short(ans: Answer | None) -> str:
         if ans is None:
             return "_"
@@ -1106,8 +1094,6 @@ def _curses_draw_batch(
 
     hint = "Opciones ↑/↓ (wrap) • Scroll PgUp/PgDn Home/End • Elegir A–J • Enter confirmar • d detalle • q/Esc cancelar"
 
-    sep_y, bottom_y, bottom_h = compute_layout(h)
-    top_h = sep_y
     top_lines: list[str] = [progress, hint]
     if status_msg:
         top_lines.append(status_msg)
@@ -1115,6 +1101,15 @@ def _curses_draw_batch(
     scoreboard = build_scoreboard_text()
     scoreboard_lines = textwrap.wrap(scoreboard, width=max(1, w - 1)) if scoreboard else []
     top_lines.extend(scoreboard_lines)
+
+    # Compact top area to the amount of real content to avoid large empty gaps.
+    min_top_content = 2  # progress + hints
+    min_bottom = 4
+    max_sep = max(min_top_content, h - (min_bottom + 1))
+    sep_y = max(min_top_content, min(len(top_lines), max_sep))
+    bottom_y = min(h - 1, sep_y + 1)
+    bottom_h = max(1, h - bottom_y)
+    top_h = sep_y
 
     for i in range(min(top_h, len(top_lines))):
         attr = curses.A_BOLD if (i == 0 or (status_msg and i == 2)) else curses.A_NORMAL
