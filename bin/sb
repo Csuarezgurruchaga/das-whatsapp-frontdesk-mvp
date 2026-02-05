@@ -90,6 +90,15 @@ if [ -z "${GITHUB_USERNAME:-}" ]; then
 fi
 
 # ----------------------------
+# 0.3) Sanity check: Context7 API key (optional but recommended)
+# ----------------------------
+if [ -z "${CONTEXT7_API_KEY:-}" ]; then
+  echo "[sb] NOTE: CONTEXT7_API_KEY is not set in the host shell."
+  echo "     Context7 MCP may fail authentication."
+  echo "     Fix: export CONTEXT7_API_KEY=... (e.g. in ~/.zshrc) and re-run."
+fi
+
+# ----------------------------
 # 1) Monitoreo de espacio
 # ----------------------------
 # This can be slow on some Docker setups. Skip with: SB_SKIP_DOCKER_DF=1
@@ -230,6 +239,7 @@ docker run --rm -it \
   -p "${HOST_PORT_8000}:8000" \
   -p "${HOST_PORT_8080}:8080" \
   -e OPENAI_ALLOWED_DOMAINS \
+  -e CONTEXT7_API_KEY \
   -e GITHUB_USERNAME \
   -e GITHUB_PERSONAL_ACCESS_TOKEN \
   -e HOME=/root \

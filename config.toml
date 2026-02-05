@@ -1,0 +1,116 @@
+model = "gpt-5.3-codex"
+model_reasoning_effort = "medium"
+model_verbosity = "medium"
+model_auto_compact_token_limit=1000000000
+web_search = "live"
+personality = "pragmatic"
+
+[mcp_servers.context7]
+command = "bash"
+args = ["-lc", "exec npx -y @upstash/context7-mcp --api-key \"$CONTEXT7_API_KEY\""]
+
+[mcp_servers.playwright]
+command = "npx"
+args = ["-y", "@playwright/mcp@latest", "--isolated"]
+
+[tui]
+notifications = ["complete"]
+
+
+[projects."/Users/csuarezgurruchaga/Desktop/real-state-top"]
+trust_level = "trusted"
+
+[projects."/Users/csuarezgurruchaga/Desktop/hybrid-chatbot"]
+trust_level = "trusted"
+
+[projects."/Users/csuarezgurruchaga/Desktop/delete_me"]
+trust_level = "trusted"
+
+[projects."/Users/csuarezgurruchaga/Desktop"]
+trust_level = "trusted"
+
+[projects."/Users/csuarezgurruchaga"]
+trust_level = "trusted"
+
+[projects."/Users/csuarezgurruchaga/Desktop/ollama-test"]
+trust_level = "trusted"
+
+[projects."/Users/csuarezgurruchaga/Desktop/test-webhook-meta"]
+trust_level = "trusted"
+
+[projects."/Users/csuarezgurruchaga/Desktop/argenfuego-quick-search"]
+trust_level = "trusted"
+
+[projects."/Users/csuarezgurruchaga/Desktop/price-finder"]
+trust_level = "trusted"
+
+[projects."/Users/csuarezgurruchaga/Desktop/voice-clone"]
+trust_level = "trusted"
+
+[projects."/Users/csuarezgurruchaga/Desktop/voice-agent/aie-voice-agents-workshop"]
+trust_level = "trusted"
+
+[projects."/Users/csuarezgurruchaga/Desktop/proyecto_artuso"]
+trust_level = "trusted"
+
+[projects."/Users/csuarezgurruchaga/Desktop/chatbot-artuso"]
+trust_level = "trusted"
+
+[projects."/Users/csuarezgurruchaga/Desktop/EVENTUALLY - AI/04-DAS/CALIDAD"]
+trust_level = "trusted"
+
+[projects."/Users/csuarezgurruchaga/Desktop/EVENTUALLY - AI/03-ADMINISTRACION-ARTUSO/chatbot-artuso"]
+trust_level = "trusted"
+
+[projects."/Users/csuarezgurruchaga/Desktop/EVENTUALLY - AI/02-ARGENFUEGO/hybrid-chatbot"]
+trust_level = "trusted"
+
+[projects."/Users/csuarezgurruchaga/Desktop/EVENTUALLY - AI/03-ADMINISTRACION-ARTUSO"]
+trust_level = "trusted"
+
+[projects."/Users/csuarezgurruchaga/Desktop/EVENTUALLY - AI/04-DAS"]
+trust_level = "trusted"
+
+[projects."/Users/csuarezgurruchaga/Desktop/EVENTUALLY - AI/example"]
+trust_level = "trusted"
+
+[projects."/Users/csuarezgurruchaga/.codex"]
+trust_level = "untrusted"
+
+[projects."/Users/csuarezgurruchaga/Desktop/TEST"]
+trust_level = "trusted"
+
+[projects."/Users/csuarezgurruchaga/Desktop/EVENTUALLY - AI/05-test"]
+trust_level = "trusted"
+
+[projects."/workspace"]
+trust_level = "trusted"
+
+[projects."/Users/csuarezgurruchaga/Desktop/EVENTUALLY - AI"]
+trust_level = "trusted"
+
+[projects."/Users/csuarezgurruchaga/Desktop/EVENTUALLY - AI/00-DISPATCHER"]
+trust_level = "trusted"
+
+[projects."/Users/csuarezgurruchaga/Desktop/EVENTUALLY - AI/04-DAS/chatbot-das"]
+trust_level = "trusted"
+
+[projects."/Users/csuarezgurruchaga/.bin"]
+trust_level = "trusted"
+
+[notice]
+hide_rate_limit_model_nudge = true
+
+[notice.model_migrations]
+"gpt-5.1-codex-max" = "gpt-5.2-codex"
+"gpt-5.2" = "gpt-5.2-codex"
+"gpt-5.1-codex-mini" = "gpt-5.2-codex"
+
+[features]
+hide_agent_reasoning = false
+unified_exec = true
+shell_snapshot = true
+steer = true
+collab = true
+collaboration_modes = true
+apps = true
