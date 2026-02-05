@@ -359,6 +359,12 @@ class TestBatchCompletenessGating(unittest.TestCase):
         self.assertTrue(ok2)
 
 
+class TestDetailViewKeys(unittest.TestCase):
+    def test_detail_mode_accepts_d_as_close_key(self):
+        self.assertIn(ord("d"), WRAP._DETAIL_CLOSE_KEYS)
+        self.assertIn(ord("D"), WRAP._DETAIL_CLOSE_KEYS)
+
+
 class TestRoundBuffer(unittest.TestCase):
     def test_round_buffer_prefers_captured_round_over_truncated_recent(self):
         rb = WRAP.RoundBuffer(max_lines=200)

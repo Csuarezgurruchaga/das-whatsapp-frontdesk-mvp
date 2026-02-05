@@ -237,6 +237,7 @@ class UserCanceled(Exception):
 _ENTER_KEYS = {10, 13, curses.KEY_ENTER, curses.ascii.NL}
 _META_LETTERS = {"G", "H", "I", "J"}
 _REOPEN_UI_KEY = 15  # Ctrl+O
+_DETAIL_CLOSE_KEYS = {27, ord("q"), ord("d"), ord("D"), *_ENTER_KEYS}
 
 
 def _drain_extra_enter_keys(win) -> None:
@@ -317,6 +318,24 @@ def _compact_label(label: str, max_chars: int) -> str:
     if max_chars <= 3:
         return single[:max_chars]
     return single[: max_chars - 3].rstrip() + "..."
+
+
+def _is_option_continuation_line(line: str) -> bool:
+    """Best-effort heuristic for wrapped option-label continuations."""
+    stripped = line.strip()
+    if not stripped:
+        return False
+    if Q_LINE_RE.match(line):
+        return False
+    if _extract_options_from_line(line):
+        return False
+    if ROUND_HEADER_RE.search(line):
+        return False
+    if ANSWER_INSTRUCTION_RE.search(line):
+        return False
+    if RESEND_PROMPT_RE.search(line):
+        return False
+    return True
 
 
 def _wrap_preserving_newlines(text: str, width: int) -> list[str]:
@@ -438,8 +457,17 @@ def parse_batch(
         title = m.group(2).strip()
 
         opts: list[Option] = []
+        last_opt_idx: int | None = None
         for line in window[start_idx + 1 : end_idx]:
-            opts.extend(_extract_options_from_line(line))
+            parsed = _extract_options_from_line(line)
+            if parsed:
+                opts.extend(parsed)
+                last_opt_idx = len(opts) - 1
+                continue
+            if last_opt_idx is not None and _is_option_continuation_line(line):
+                prev = opts[last_opt_idx]
+                merged = f"{prev.label} {line.strip()}".strip()
+                opts[last_opt_idx] = Option(letter=prev.letter, label=merged)
 
         opts = _dedupe_options(opts)
         letters = {o.letter for o in opts}
@@ -661,7 +689,7 @@ def _curses_view_text(stdscr, title: str, body: str) -> None:
         stdscr.addnstr(
             1,
             0,
-            "↑/↓ scroll • PgUp/PgDn • Enter/Esc/q cerrar",
+            "↑/↓ scroll • PgUp/PgDn • Enter/d/Esc/q cerrar",
             max(0, w - 1),
         )
 
@@ -674,7 +702,7 @@ def _curses_view_text(stdscr, title: str, body: str) -> None:
 
         stdscr.refresh()
         ch = stdscr.getch()
-        if ch in (27, ord("q"), *list(_ENTER_KEYS)):
+        if ch in _DETAIL_CLOSE_KEYS:
             _drain_extra_enter_keys(stdscr)
             return
         if ch in (curses.KEY_UP, ord("k")):
