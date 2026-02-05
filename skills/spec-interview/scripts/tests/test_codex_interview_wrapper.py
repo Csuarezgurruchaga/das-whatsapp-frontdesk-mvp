@@ -208,6 +208,13 @@ Drafting structured questions in Spanish(0s • esc to interrupt)
 B) Backlog → Doing → Done — Qué es: versión Kanban breve.
 """.strip()
 
+SAMPLE_INLINE_CHROME_NOISE_VARIANT = """
+Q1 — Alcance de persistencia SQLiteDrafting initial interview questions(0s • esc to interrupt)>Find and fix a bug in @filename? for shortcuts99% context left
+A) Solo persistir entidades actuales sin cambiar API pública
+B) Persistencia + capa de repositorio (abstracción DB)
+onnss
+""".strip()
+
 
 class TestParseBatch(unittest.TestCase):
     def test_parse_batch_extracts_questions_and_inline_options(self):
@@ -307,6 +314,15 @@ class TestParseBatch(unittest.TestCase):
         opt_a = next(o for o in q8.options if o.letter == "A")
         self.assertNotIn("Drafting structured questions", opt_a.label)
         self.assertNotIn("esc to interrupt", opt_a.label)
+
+    def test_parse_batch_strips_inline_chrome_noise_variant_and_ignores_garbage_continuation(self):
+        lines = [ln.rstrip() for ln in SAMPLE_INLINE_CHROME_NOISE_VARIANT.splitlines()]
+        batch = WRAP.parse_batch(lines, max_lookback=50)
+        self.assertIsNotNone(batch)
+        q1 = batch.questions[0]
+        self.assertEqual(q1.title, "Alcance de persistencia SQLite")
+        opt_b = next(o for o in q1.options if o.letter == "B")
+        self.assertEqual(opt_b.label, "Persistencia + capa de repositorio (abstracción DB)")
 
     def test_parse_batch_rejects_qn_without_options(self):
         lines = [ln.rstrip() for ln in SAMPLE_Q_ONLY.splitlines()]

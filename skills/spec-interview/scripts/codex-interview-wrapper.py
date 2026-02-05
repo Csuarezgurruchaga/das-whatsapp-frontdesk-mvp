@@ -54,10 +54,13 @@ CODEX_CHROME_RE = re.compile(
 )
 INLINE_CHROME_CUT_RE = re.compile(
     r"(?:"
-    r"\bDrafting structured questions\b"
+    r"Drafting\b.*\binterview questions\b"
+    r"|Drafting structured questions\b"
+    r"|Drafting initial interview questions\b"
     r"|\bWrite tests for\b"
-    r"|\bcontext left\b"
-    r"|\bfor shortcuts\b"
+    r"|\bFind and fix a bug in @filename\?"
+    r"|\bcontext left"
+    r"|\bfor shortcuts"
     r"|\bWorking\("
     r"|\bCode mode\b"
     r"|esc to interrupt"
@@ -373,6 +376,10 @@ def _is_option_continuation_line(line: str) -> bool:
     if RESEND_PROMPT_RE.search(line):
         return False
     if not re.match(r"^[a-záéíóúñü¿¡\"'(\[]", stripped, re.IGNORECASE):
+        return False
+    # Avoid merging short single-token repaint fragments into option labels
+    # (e.g. "onnss", "ragtif...") coming from mixed renderer status output.
+    if " " not in stripped and len(stripped) < 16:
         return False
     return True
 
