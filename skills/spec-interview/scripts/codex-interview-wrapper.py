@@ -332,6 +332,21 @@ def _compact_label(label: str, max_chars: int) -> str:
     return single[: max_chars - 3].rstrip() + "..."
 
 
+def _wrapper_notice_payload(message: str, *, is_tty: bool) -> str:
+    # When coming from curses/raw TTY flows, the cursor can be mid-line due to
+    # status repaints; clear current line before printing wrapper notices.
+    prefix = "\r\x1b[2K" if is_tty else ""
+    return f"{prefix}{message}\n"
+
+
+def _emit_wrapper_notice(message: str) -> None:
+    payload = _wrapper_notice_payload(message, is_tty=sys.stderr.isatty())
+    try:
+        os.write(sys.stderr.fileno(), payload.encode("utf-8", "replace"))
+    except Exception:
+        print(message, file=sys.stderr, flush=True)
+
+
 def _strip_inline_chrome(line: str) -> str:
     """Drop known Codex status/chrome fragments injected into content lines."""
     m = INLINE_CHROME_CUT_RE.search(line)
@@ -2049,9 +2064,8 @@ def run_interactive(
             except UserCanceled:
                 log("[wrapper] canceled by user")
                 dismissed_batch = batch
-                print(
-                    "[wrapper] UI cerrada. Presioná Ctrl+O para reabrir el último batch.",
-                    file=sys.stderr,
+                _emit_wrapper_notice(
+                    "[wrapper] UI cerrada. Presioná Ctrl+O para reabrir el último batch."
                 )
                 # Suppress any stray Enter that immediately follows closing our UI.
                 suppress_stdin_newline_until = time.time() + 0.35
