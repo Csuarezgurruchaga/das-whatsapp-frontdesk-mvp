@@ -1,10 +1,48 @@
 ## Design & workflow policy
 
+## Pre-flight checklist (execute before any code changes)
+
+Before modifying code in any project:
+
+- [ ] **Local AGENTS.md exists**
+  - Path: `<repo_root>/AGENTS.md`
+  - If missing: `cp $HOME/.codex/templates/agents_local.md <repo_root>/AGENTS.md`
+  - Action: Read it fully before proceeding
+
+- [ ] **Understand the scope**
+  - Is this trivial/mechanical? (single file, <20 lines, no architecture impact)
+  - Is this non-trivial? (check for existing specs in `docs/specs/`)
+
+- [ ] **Verify test infrastructure**
+  - Do tests exist? (run `make test` or equivalent)
+  - If NO tests: state this explicitly, do NOT create test infrastructure unless asked
+
+- [ ] **Check for open questions**
+  - Review local AGENTS.md section 5 (Open questions/TODO)
+  - Review any SPEC.md files in `docs/specs/<slug>/`
+
+**If unsure about any item**: ask before proceeding.
+
+---
+
 - For any task involving non-trivial design, trade-offs, or architecture:
   - Use the `spec-interview` skill first.
   - Do NOT implement code until SPEC.md has no Open Questions.
 
-- Small, local, or mechanical changes may skip the spec workflow unless explicitly requested.
+- **Small/mechanical changes** (MAY skip spec workflow):
+  - Single-file edits with <20 lines changed
+  - Typo fixes, formatting, linting
+  - Dependency version bumps (patch-level only)
+  - Log message improvements
+  
+- **Non-trivial changes** (MUST use spec workflow):
+  - Affects >2 files OR >50 lines total
+  - Changes public APIs, data models, or schemas
+  - Introduces new dependencies or architectural patterns
+  - Modifies authentication, authorization, or security logic
+  - Changes behavior that users or external systems depend on
+  
+- **When in doubt**: err on the side of creating a spec. Over-documentation is recoverable; under-documentation causes rework.
 
 - Specs live under `docs/specs/<slug>/` and are the source of truth.
 
@@ -71,6 +109,61 @@ When a bug is reported:
   - how to run and test based on what exists
 - Keep explanations concise unless more detail is requested.
 
+## Local AGENTS.md policy (scope, creation, logging)
+
+### Global vs Local AGENTS
+
+- This file (`~/.codex/AGENTS.md`) is **GLOBAL**:
+  - Defines workflow rules, safety constraints, and agent behavior.
+  - It is NOT a project-specific log or decision record.
+
+- Every project/repository MUST have its own **LOCAL `AGENTS.md`** (at that repo root):
+  - Created at project initialization if missing.
+  - Used as a persistent development log / ledger.
+  - Survives context resets, agent restarts, and squash merges.
+
+### Local AGENTS.md (required)
+
+When starting work on a project/repo:
+
+- If `AGENTS.md` does not exist at the project root:
+  - Create it immediately by copying `~/.codex/templates/agents_local.md` to `<repo_root>/AGENTS.md` (verbatim).
+- If it exists:
+  - Read it before making changes.
+
+If both a GLOBAL and LOCAL AGENTS exist:
+- Follow the GLOBAL rules in `~/.codex/AGENTS.md`.
+- Write project-specific logs to the LOCAL `<repo_root>/AGENTS.md`.
+
+### Update rules
+
+- Updates are **append-only** by default.
+- Do NOT rewrite or delete existing entries unless explicitly instructed.
+- Avoid noise: log only information that would help resume work after context loss.
+- Each entry should include:
+  - date (ISO)
+  - context (file/service/component)
+  - problem
+  - solution
+  - optional notes / follow-ups
+  - optional proof (command/test/log) when relevant
+
+### Triggers (when to log)
+
+Log an entry when:
+- a bug is fixed (especially after a repro/test is added)
+- a non-trivial design/architecture decision is made
+- environment/infra/CI changes were required to make progress
+- you discover a pitfall that could easily waste time again
+
+### Responsibility
+
+- The active coding agent is responsible for:
+  - proposing new entries when relevant events occur
+  - keeping the local `AGENTS.md` up to date
+- If unsure whether something should be logged:
+  - prefer logging briefly over omitting it.
+
 # Project Context
 
 This project is configured with Model Context Protocol (MCP) servers that extend Codex's capabilities for GitHub operations and browser automation.
@@ -104,3 +197,12 @@ Provides real browser automation for UI verification (navigate, click, fill form
 - "Verify login redirects to /dashboard"
 - "Check main navigation links aren’t broken"
 - "Reproduce bug: [steps] and capture screenshots + console errors"
+
+## 2026-02-05 Development Log
+
+- date: 2026-02-05
+- context: `skills/spec-interview/scripts/codex-interview-wrapper.py` parser de rondas (Qn/opciones)
+- problem: El UI batch mostraba texto basura incrustado en títulos/opciones (ej. `Drafting initial interview questions`, `for shortcuts99% context left`, y fragmentos cortos como `onnss`) por líneas de estado de Codex mezcladas con contenido parseado.
+- solution: Se endureció `_strip_inline_chrome` para cortar nuevas variantes de chrome/status y se ajustó `_is_option_continuation_line` para ignorar fragmentos cortos de un solo token que no son continuidad real de opciones.
+- notes: Se agregó repro automatizado para la variante observada y se mantuvieron verdes los tests existentes del wrapper.
+- proof: `python3 -m unittest -v skills/spec-interview/scripts/tests/test_codex_interview_wrapper.py`
