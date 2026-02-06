@@ -76,3 +76,10 @@
 - solution: Added attachment download/view + export download authorization endpoints that validate session/permissions and emit `X-Accel-Redirect` with safe relpaths and content headers; documented Nginx mapping requirements; added endpoint-level tests for success and authorization failures.
 - notes: Test coverage was implemented as direct endpoint function tests because `httpx` is not installed in this environment (`fastapi.testclient` unavailable).
 - proof: `.venv/bin/python -m unittest discover -s tests -v`
+
+- date: 2026-02-06
+- context: `app/static/{index.html,styles.css,app.js}`, `docs/specs/whatsapp-frontdesk-extensions/{TASKS.md,CHECKPOINT.md}` (Task `T2.2`)
+- problem: Frontend attachments implementation was interrupted mid-session, leaving partial wiring (`attach` input/modal handlers not bound) and a CSS precedence bug where the preview modal could remain visible despite `hidden`.
+- solution: Completed the attachments UI flow end-to-end (paperclip trigger, upload request, optimistic `uploading`, final `sent/failed`, history bubble rendering, view/download actions), fixed modal hidden-state override (`.attachment-modal.hidden`), and updated spec execution status/checkpoint to move next to `T2.3`.
+- notes: Browser smoke for T2.2 still requires seeded/authenticated runtime environment; backend regression suite remained green.
+- proof: `node --check app/static/app.js && .venv/bin/python -m unittest discover -s tests -v`
