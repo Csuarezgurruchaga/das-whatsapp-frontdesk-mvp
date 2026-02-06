@@ -82,6 +82,16 @@
                 <button class="chip" data-template="Mensaje sin respuesta">Mensaje sin respuesta</button>
               </div>
               <div class="composer-row">
+                <button
+                  class="ghost attach-btn"
+                  id="attach-btn"
+                  type="button"
+                  aria-label="Adjuntar archivo"
+                  title="Adjuntar archivo"
+                >
+                  📎
+                </button>
+                <input id="attachment-input" class="attachment-input" type="file" />
                 <textarea id="message-input" placeholder="Escribe un mensaje" rows="2"></textarea>
                 <button class="primary" id="send-btn">Enviar</button>
               </div>
@@ -99,6 +109,26 @@
           </aside>
         </div>
       </section>
+    </div>
+
+    <div
+      class="attachment-modal hidden"
+      id="attachment-modal"
+      role="dialog"
+      aria-modal="true"
+      aria-labelledby="attachment-modal-title"
+    >
+      <div class="attachment-modal-card">
+        <div class="attachment-modal-header">
+          <h2 id="attachment-modal-title">Vista previa</h2>
+          <button class="ghost" id="attachment-modal-close" type="button">Cerrar</button>
+        </div>
+        <iframe
+          id="attachment-preview-frame"
+          title="Vista previa de adjunto"
+          loading="lazy"
+        ></iframe>
+      </div>
     </div>
 
     <script src="/static/app.js"></script>

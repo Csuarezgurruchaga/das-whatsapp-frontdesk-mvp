@@ -7,9 +7,67 @@ const state = {
     ASIGNADO: [],
   },
   activeConversation: null,
+  activeMessages: [],
+  pendingAttachmentMessages: [],
   agentOptions: [],
   ws: null,
 };
+
+const MAX_UPLOAD_BYTES = 100 * 1024 * 1024;
+const IMAGE_MAX_UPLOAD_BYTES = 5 * 1024 * 1024;
+const AUDIO_MAX_UPLOAD_BYTES = 16 * 1024 * 1024;
+const VIDEO_MAX_UPLOAD_BYTES = 16 * 1024 * 1024;
+const DOCUMENT_MAX_UPLOAD_BYTES = MAX_UPLOAD_BYTES;
+
+const SUPPORTED_MIME_TYPES = new Set([
+  "image/jpeg",
+  "image/png",
+  "video/mp4",
+  "video/3gp",
+  "video/3gpp",
+  "audio/aac",
+  "audio/amr",
+  "audio/mp4",
+  "audio/ogg",
+  "audio/mpeg",
+  "text/plain",
+  "application/pdf",
+  "application/msword",
+  "application/vnd.ms-excel",
+  "application/vnd.ms-powerpoint",
+  "application/vnd.openxmlformats-officedocument.wordprocessingml.document",
+  "application/vnd.openxmlformats-officedocument.spreadsheetml.sheet",
+  "application/vnd.openxmlformats-officedocument.presentationml.presentation",
+]);
+
+const EXTENSION_TO_MIME = {
+  ".jpg": "image/jpeg",
+  ".jpeg": "image/jpeg",
+  ".png": "image/png",
+  ".mp4": "video/mp4",
+  ".3gp": "video/3gp",
+  ".3gpp": "video/3gpp",
+  ".aac": "audio/aac",
+  ".amr": "audio/amr",
+  ".m4a": "audio/mp4",
+  ".ogg": "audio/ogg",
+  ".mp3": "audio/mpeg",
+  ".txt": "text/plain",
+  ".pdf": "application/pdf",
+  ".doc": "application/msword",
+  ".xls": "application/vnd.ms-excel",
+  ".ppt": "application/vnd.ms-powerpoint",
+  ".docx": "application/vnd.openxmlformats-officedocument.wordprocessingml.document",
+  ".xlsx": "application/vnd.openxmlformats-officedocument.spreadsheetml.sheet",
+  ".pptx": "application/vnd.openxmlformats-officedocument.presentationml.presentation",
+};
+
+const VIEWABLE_MIME_TYPES = new Set([
+  "application/pdf",
+  "image/jpeg",
+  "image/png",
+  "text/plain",
+]);
 
 const els = {
   loginView: document.getElementById("login-view"),
@@ -27,8 +85,14 @@ const els = {
   chatBody: document.getElementById("chat-body"),
   detailBody: document.getElementById("detail-body"),
   sendBtn: document.getElementById("send-btn"),
+  attachBtn: document.getElementById("attach-btn"),
+  attachmentInput: document.getElementById("attachment-input"),
   messageInput: document.getElementById("message-input"),
   composerError: document.getElementById("composer-error"),
+  attachmentModal: document.getElementById("attachment-modal"),
+  attachmentModalClose: document.getElementById("attachment-modal-close"),
+  attachmentModalTitle: document.getElementById("attachment-modal-title"),
+  attachmentPreviewFrame: document.getElementById("attachment-preview-frame"),
   quickActions: document.querySelectorAll(".chip"),
 };
 
@@ -43,9 +107,11 @@ function setView(view) {
 }
 
 async function apiFetch(path, options = {}) {
+  const isFormData = options.body instanceof FormData;
+  const defaultHeaders = isFormData ? {} : { "Content-Type": "application/json" };
   const response = await fetch(path, {
     headers: {
-      "Content-Type": "application/json",
+      ...defaultHeaders,
       ...options.headers,
     },
     credentials: "include",
@@ -53,8 +119,7 @@ async function apiFetch(path, options = {}) {
   });
 
   if (!response.ok) {
-    const detail = await response.text();
-    throw new Error(detail || "Request failed");
+    throw new Error(await extractErrorDetail(response));
   }
   if (response.status === 204) {
     return null;
@@ -102,6 +167,10 @@ async function handleLogout() {
     // Ignore logout errors.
   }
   state.currentUser = null;
+  state.activeConversation = null;
+  state.activeMessages = [];
+  state.pendingAttachmentMessages = [];
+  closeAttachmentPreview();
   disconnectWs();
   setView("login");
 }
@@ -110,6 +179,8 @@ function initAfterLogin() {
   els.userChip.textContent = `${state.currentUser.username} (${state.currentUser.role})`;
   state.activeTab = "CHATBOT";
   state.activeConversation = null;
+  state.activeMessages = [];
+  state.pendingAttachmentMessages = [];
   renderTabs();
   loadConversations();
   connectWs();
@@ -220,32 +291,109 @@ async function selectConversation(conversationId) {
 async function loadMessages(conversationId, markRead) {
   const query = markRead ? "?mark_read=true" : "";
   const messages = await apiFetch(`/conversations/${conversationId}/messages${query}`);
+  state.activeMessages = messages || [];
   renderChat(messages);
 }
 
 function renderChat(messages) {
+  const currentConversationId = state.activeConversation?.conversation_id;
+  const pending = currentConversationId
+    ? state.pendingAttachmentMessages.filter(
+        (item) => item.conversationId === currentConversationId
+      )
+    : [];
+  const renderedMessages = [...(messages || []), ...pending.map((item) => item.message)];
+
   els.chatBody.innerHTML = "";
-  if (!messages || messages.length === 0) {
+  if (renderedMessages.length === 0) {
     els.chatBody.innerHTML = '<p class="muted">Sin mensajes.</p>';
     return;
   }
-  messages.forEach((msg) => {
+  renderedMessages.forEach((msg) => {
     const bubble = document.createElement("div");
     const outbound = msg.direction === "OUTBOUND";
     bubble.className = `message ${outbound ? "outbound" : "inbound"}`;
 
-    const text = document.createElement("div");
-    text.textContent = msg.text || "(sin texto)";
+    const hasAttachment = Boolean(msg.attachment);
+    const textValue = (msg.text || "").trim();
+    const shouldShowPlainText = !hasAttachment || !textValue.startsWith("[attachment]");
+
+    if (shouldShowPlainText) {
+      const text = document.createElement("div");
+      text.textContent = msg.text || "(sin texto)";
+      bubble.appendChild(text);
+    }
+
+    if (hasAttachment) {
+      bubble.appendChild(buildAttachmentBubble(msg.attachment));
+    }
 
     const meta = document.createElement("div");
     meta.className = "meta";
     meta.textContent = `${msg.sender_type} · ${formatTime(msg.created_at)}`;
 
-    bubble.appendChild(text);
     bubble.appendChild(meta);
     els.chatBody.appendChild(bubble);
   });
   els.chatBody.scrollTop = els.chatBody.scrollHeight;
+}
+
+function buildAttachmentBubble(attachment) {
+  const wrapper = document.createElement("div");
+  wrapper.className = "attachment-bubble";
+
+  const mainLine = document.createElement("div");
+  mainLine.className = "attachment-line";
+  const icon = document.createElement("span");
+  icon.className = "attachment-icon";
+  icon.textContent = "📎";
+  const filename = document.createElement("span");
+  filename.className = "attachment-name";
+  filename.textContent = attachment.filename || "adjunto";
+  mainLine.appendChild(icon);
+  mainLine.appendChild(filename);
+
+  const metaLine = document.createElement("div");
+  metaLine.className = "attachment-submeta";
+  metaLine.textContent = `${formatFileSize(attachment.size_bytes)} · ${attachment.mime || "-"}`;
+
+  const status = document.createElement("span");
+  const statusValue = normalizeAttachmentStatus(attachment.status);
+  status.className = `status-pill ${statusValue}`;
+  status.textContent = statusLabel(statusValue);
+
+  const lineWithStatus = document.createElement("div");
+  lineWithStatus.className = "attachment-line";
+  lineWithStatus.appendChild(metaLine);
+  lineWithStatus.appendChild(status);
+
+  wrapper.appendChild(mainLine);
+  wrapper.appendChild(lineWithStatus);
+
+  if (attachment.attachment_id && statusValue !== "uploading") {
+    const actionRow = document.createElement("div");
+    actionRow.className = "attachment-actions";
+
+    if (isViewableMime(attachment.mime)) {
+      const viewBtn = document.createElement("button");
+      viewBtn.type = "button";
+      viewBtn.className = "ghost";
+      viewBtn.textContent = "Ver";
+      viewBtn.addEventListener("click", () => openAttachmentPreview(attachment));
+      actionRow.appendChild(viewBtn);
+    }
+
+    const downloadBtn = document.createElement("button");
+    downloadBtn.type = "button";
+    downloadBtn.className = "ghost";
+    downloadBtn.textContent = "Descargar";
+    downloadBtn.addEventListener("click", () => downloadAttachment(attachment));
+    actionRow.appendChild(downloadBtn);
+
+    wrapper.appendChild(actionRow);
+  }
+
+  return wrapper;
 }
 
 function renderDetails() {
@@ -366,6 +514,96 @@ async function sendMessage() {
   }
 }
 
+function removePendingAttachmentMessage(tempId) {
+  state.pendingAttachmentMessages = state.pendingAttachmentMessages.filter(
+    (item) => item.tempId !== tempId
+  );
+}
+
+function addPendingAttachmentMessage(file, resolvedMime) {
+  const currentConversation = state.activeConversation;
+  if (!currentConversation) {
+    return null;
+  }
+  const tempId = `pending-${Date.now()}-${Math.random().toString(16).slice(2)}`;
+  const pendingMessage = {
+    message_id: tempId,
+    direction: "OUTBOUND",
+    sender_type: "AGENT",
+    text: `[attachment] ${file.name || "adjunto"}`,
+    created_at: new Date().toISOString(),
+    attachment: {
+      attachment_id: tempId,
+      filename: file.name || "adjunto",
+      mime: resolvedMime,
+      size_bytes: Number(file.size) || 0,
+      status: "uploading",
+    },
+  };
+
+  state.pendingAttachmentMessages.push({
+    tempId,
+    conversationId: currentConversation.conversation_id,
+    message: pendingMessage,
+  });
+  renderChat(state.activeMessages);
+  return tempId;
+}
+
+async function sendAttachment() {
+  const activeConversationId = state.activeConversation?.conversation_id;
+  if (!activeConversationId) {
+    return;
+  }
+  const selectedFile = els.attachmentInput.files?.[0];
+  if (!selectedFile) {
+    return;
+  }
+
+  els.composerError.textContent = "";
+
+  let resolvedMime = "";
+  try {
+    resolvedMime = resolveAttachmentMime(selectedFile);
+    validateAttachmentSize(selectedFile.size, resolvedMime);
+  } catch (err) {
+    els.composerError.textContent = err instanceof Error ? err.message : "Adjunto invalido.";
+    els.attachmentInput.value = "";
+    return;
+  }
+
+  const tempId = addPendingAttachmentMessage(selectedFile, resolvedMime);
+  els.attachBtn.disabled = true;
+  els.sendBtn.disabled = true;
+
+  try {
+    const formData = new FormData();
+    formData.append("file", selectedFile, selectedFile.name || "adjunto");
+    await apiFetch(`/conversations/${activeConversationId}/attachments`, {
+      method: "POST",
+      body: formData,
+    });
+    els.attachmentInput.value = "";
+    await loadMessages(activeConversationId, true);
+    await refreshAllLists();
+  } catch (err) {
+    els.composerError.textContent =
+      err instanceof Error && err.message ? err.message : "No se pudo enviar el adjunto.";
+    try {
+      await loadMessages(activeConversationId, true);
+      await refreshAllLists();
+    } catch (reloadErr) {
+      removePendingAttachmentMessage(tempId);
+      renderChat(state.activeMessages);
+    }
+  } finally {
+    removePendingAttachmentMessage(tempId);
+    renderChat(state.activeMessages);
+    els.attachBtn.disabled = false;
+    els.sendBtn.disabled = false;
+  }
+}
+
 async function takeConversation(conversationId) {
   try {
     await apiFetch(`/conversations/${conversationId}/take`, { method: "POST" });
@@ -459,6 +697,152 @@ async function handleRealtimeEvent(payload) {
   }
 }
 
+function extractExtension(filename) {
+  const value = String(filename || "").toLowerCase().trim();
+  const lastDot = value.lastIndexOf(".");
+  if (lastDot <= 0 || lastDot === value.length - 1) {
+    return "";
+  }
+  return value.slice(lastDot);
+}
+
+function resolveAttachmentMime(file) {
+  const reportedMime = String(file.type || "").trim().toLowerCase();
+  if (reportedMime && reportedMime !== "application/octet-stream") {
+    if (!SUPPORTED_MIME_TYPES.has(reportedMime)) {
+      throw new Error(`Tipo de archivo no soportado: ${reportedMime}`);
+    }
+    return reportedMime;
+  }
+  const inferred = EXTENSION_TO_MIME[extractExtension(file.name)];
+  if (!inferred || !SUPPORTED_MIME_TYPES.has(inferred)) {
+    throw new Error("No se pudo inferir un tipo de archivo permitido.");
+  }
+  return inferred;
+}
+
+function mediaLimitForMime(mime) {
+  if (mime.startsWith("image/")) {
+    return IMAGE_MAX_UPLOAD_BYTES;
+  }
+  if (mime.startsWith("audio/")) {
+    return AUDIO_MAX_UPLOAD_BYTES;
+  }
+  if (mime.startsWith("video/")) {
+    return VIDEO_MAX_UPLOAD_BYTES;
+  }
+  return DOCUMENT_MAX_UPLOAD_BYTES;
+}
+
+function validateAttachmentSize(sizeBytes, mime) {
+  const size = Number(sizeBytes) || 0;
+  if (size <= 0) {
+    throw new Error("El adjunto no puede estar vacio.");
+  }
+  if (size > MAX_UPLOAD_BYTES) {
+    throw new Error("El adjunto supera el limite global de 100MB.");
+  }
+  const mediaLimit = mediaLimitForMime(mime);
+  if (size > mediaLimit) {
+    throw new Error(`El adjunto supera el limite para ${mime} (${formatFileSize(mediaLimit)}).`);
+  }
+}
+
+function normalizeAttachmentStatus(status) {
+  const value = String(status || "").toLowerCase();
+  if (value === "sent" || value === "failed" || value === "uploading") {
+    return value;
+  }
+  return "uploading";
+}
+
+function statusLabel(status) {
+  if (status === "sent") {
+    return "SENT";
+  }
+  if (status === "failed") {
+    return "FAILED";
+  }
+  return "UPLOADING";
+}
+
+function formatFileSize(sizeBytes) {
+  const size = Number(sizeBytes) || 0;
+  if (size < 1024) {
+    return `${size} B`;
+  }
+  if (size < 1024 * 1024) {
+    return `${(size / 1024).toFixed(1)} KB`;
+  }
+  return `${(size / (1024 * 1024)).toFixed(1)} MB`;
+}
+
+function isViewableMime(mime) {
+  return VIEWABLE_MIME_TYPES.has(String(mime || "").toLowerCase());
+}
+
+function buildAttachmentUrl(attachment, mode) {
+  const conversationId = state.activeConversation?.conversation_id;
+  if (!conversationId) {
+    throw new Error("No hay una conversacion seleccionada.");
+  }
+  const attachmentId = encodeURIComponent(attachment.attachment_id);
+  return `/conversations/${conversationId}/attachments/${attachmentId}/${mode}`;
+}
+
+function downloadAttachment(attachment) {
+  try {
+    const downloadUrl = buildAttachmentUrl(attachment, "download");
+    const link = document.createElement("a");
+    link.href = downloadUrl;
+    link.target = "_blank";
+    link.rel = "noopener";
+    document.body.appendChild(link);
+    link.click();
+    link.remove();
+  } catch (err) {
+    els.composerError.textContent =
+      err instanceof Error && err.message ? err.message : "No se pudo iniciar la descarga.";
+  }
+}
+
+function openAttachmentPreview(attachment) {
+  if (!isViewableMime(attachment.mime)) {
+    els.composerError.textContent = "Este tipo de archivo no admite vista previa.";
+    return;
+  }
+  try {
+    const previewUrl = buildAttachmentUrl(attachment, "view");
+    els.attachmentModalTitle.textContent = attachment.filename || "Vista previa";
+    els.attachmentPreviewFrame.src = previewUrl;
+    els.attachmentModal.classList.remove("hidden");
+  } catch (err) {
+    els.composerError.textContent =
+      err instanceof Error && err.message ? err.message : "No se pudo abrir la vista previa.";
+  }
+}
+
+function closeAttachmentPreview() {
+  els.attachmentPreviewFrame.src = "about:blank";
+  els.attachmentModal.classList.add("hidden");
+}
+
+async function extractErrorDetail(response) {
+  const contentType = response.headers.get("content-type") || "";
+  if (contentType.includes("application/json")) {
+    try {
+      const payload = await response.json();
+      if (payload && typeof payload.detail === "string" && payload.detail.trim()) {
+        return payload.detail;
+      }
+    } catch (err) {
+      // Fall through and return text.
+    }
+  }
+  const text = await response.text();
+  return text || "Request failed";
+}
+
 function labelForState(stateKey) {
   switch (stateKey) {
     case "CHATBOT":
@@ -542,6 +926,19 @@ els.tabs.forEach((tab) => {
 
 els.sendBtn.addEventListener("click", sendMessage);
 
+els.attachBtn.addEventListener("click", () => {
+  if (!state.activeConversation) {
+    els.composerError.textContent = "Selecciona una conversacion para adjuntar archivos.";
+    return;
+  }
+  els.composerError.textContent = "";
+  els.attachmentInput.click();
+});
+
+els.attachmentInput.addEventListener("change", () => {
+  sendAttachment();
+});
+
 els.messageInput.addEventListener("keydown", (event) => {
   if (event.key === "Enter" && !event.shiftKey) {
     event.preventDefault();
@@ -555,6 +952,20 @@ els.quickActions.forEach((button) => {
     els.messageInput.value = template;
     els.messageInput.focus();
   });
+});
+
+els.attachmentModalClose.addEventListener("click", closeAttachmentPreview);
+
+els.attachmentModal.addEventListener("click", (event) => {
+  if (event.target === els.attachmentModal) {
+    closeAttachmentPreview();
+  }
+});
+
+document.addEventListener("keydown", (event) => {
+  if (event.key === "Escape" && !els.attachmentModal.classList.contains("hidden")) {
+    closeAttachmentPreview();
+  }
 });
 
 bootstrap();

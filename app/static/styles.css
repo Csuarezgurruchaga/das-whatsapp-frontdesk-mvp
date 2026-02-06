@@ -315,6 +315,70 @@ button.ghost {
   font-family: var(--mono);
 }
 
+.attachment-bubble {
+  display: grid;
+  gap: 8px;
+}
+
+.attachment-line {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  word-break: break-word;
+}
+
+.attachment-icon {
+  font-size: 1rem;
+}
+
+.attachment-name {
+  font-weight: 600;
+}
+
+.attachment-submeta {
+  color: var(--muted);
+  font-size: 0.72rem;
+  font-family: var(--mono);
+}
+
+.attachment-actions {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 8px;
+}
+
+.attachment-actions button {
+  font-size: 0.78rem;
+  padding: 6px 10px;
+}
+
+.status-pill {
+  border-radius: 999px;
+  padding: 3px 8px;
+  text-transform: uppercase;
+  font-size: 0.62rem;
+  letter-spacing: 0.04em;
+  border: 1px solid transparent;
+}
+
+.status-pill.uploading {
+  color: #fcd34d;
+  border-color: rgba(252, 211, 77, 0.4);
+  background: rgba(252, 211, 77, 0.14);
+}
+
+.status-pill.sent {
+  color: #86efac;
+  border-color: rgba(134, 239, 172, 0.4);
+  background: rgba(134, 239, 172, 0.14);
+}
+
+.status-pill.failed {
+  color: #fca5a5;
+  border-color: rgba(252, 165, 165, 0.4);
+  background: rgba(252, 165, 165, 0.14);
+}
+
 .composer {
   border-top: 1px solid var(--panel-border);
   padding: 16px 20px 20px;
@@ -338,9 +402,69 @@ button.ghost {
 
 .composer-row {
   display: grid;
-  grid-template-columns: 1fr auto;
+  grid-template-columns: auto 1fr auto;
   gap: 12px;
   align-items: center;
+}
+
+.attach-btn {
+  width: 42px;
+  height: 42px;
+  display: grid;
+  place-items: center;
+  padding: 0;
+  font-size: 1.1rem;
+}
+
+.attachment-input {
+  display: none;
+}
+
+.attachment-modal {
+  position: fixed;
+  inset: 0;
+  background: rgba(2, 6, 23, 0.75);
+  backdrop-filter: blur(4px);
+  display: grid;
+  place-items: center;
+  padding: 20px;
+  z-index: 1000;
+}
+
+.attachment-modal.hidden {
+  display: none;
+}
+
+.attachment-modal-card {
+  width: min(900px, 96vw);
+  height: min(680px, 88vh);
+  border: 1px solid var(--panel-border);
+  border-radius: var(--radius);
+  background: #0b1220;
+  box-shadow: var(--shadow);
+  display: grid;
+  grid-template-rows: auto 1fr;
+  overflow: hidden;
+}
+
+.attachment-modal-header {
+  display: flex;
+  justify-content: space-between;
+  align-items: center;
+  padding: 12px 14px;
+  border-bottom: 1px solid var(--panel-border);
+}
+
+.attachment-modal-header h2 {
+  margin: 0;
+  font-size: 0.95rem;
+}
+
+#attachment-preview-frame {
+  width: 100%;
+  height: 100%;
+  border: none;
+  background: #020617;
 }
 
 .details {
@@ -402,5 +526,14 @@ button.ghost {
     flex-direction: column;
     align-items: flex-start;
     gap: 12px;
+  }
+
+  .composer-row {
+    grid-template-columns: 1fr;
+  }
+
+  .attach-btn {
+    width: 100%;
+    height: 38px;
   }
 }
