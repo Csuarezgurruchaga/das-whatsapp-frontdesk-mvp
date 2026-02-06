@@ -8,7 +8,11 @@ from unittest.mock import patch
 from sqlalchemy import create_engine, func, select
 from sqlalchemy.orm import Session, sessionmaker
 
-from app.attachment_pipeline import send_outbound_attachment
+from app.attachment_pipeline import (
+    get_attachment_send_counters,
+    reset_attachment_send_counters,
+    send_outbound_attachment,
+)
 from app.config import ExtrasConfig, get_extras_config
 from app.db import crud
 from app.db.base import Base
@@ -43,6 +47,7 @@ def _next_id(session: Session, model: type) -> int:
 class TestAttachmentPipeline(unittest.TestCase):
     def setUp(self) -> None:
         self.session = _build_test_session()
+        reset_attachment_send_counters()
         self.user = User(
             id=1,
             username="agent1",
@@ -138,6 +143,9 @@ class TestAttachmentPipeline(unittest.TestCase):
         assert attachment is not None
         self.assertEqual(attachment.status, AttachmentStatus.SENT)
         self.assertIsNotNone(attachment.message_id)
+        counters = get_attachment_send_counters()
+        self.assertEqual(counters["success"], 1)
+        self.assertEqual(counters["failure"], 0)
 
     def test_retry_after_failed_send_is_deduped_and_transitions_to_sent(self) -> None:
         with TemporaryDirectory() as tmpdir:
@@ -193,6 +201,9 @@ class TestAttachmentPipeline(unittest.TestCase):
         messages_count = self.session.scalar(select(func.count(Message.id)))
         self.assertEqual(int(attachments_count or 0), 1)
         self.assertEqual(int(messages_count or 0), 1)
+        counters = get_attachment_send_counters()
+        self.assertEqual(counters["success"], 1)
+        self.assertEqual(counters["failure"], 1)
 
     def test_sent_attachment_retry_returns_existing_without_new_send(self) -> None:
         with TemporaryDirectory() as tmpdir:
@@ -248,6 +259,9 @@ class TestAttachmentPipeline(unittest.TestCase):
         self.assertEqual(first.attachment_id, second.attachment_id)
         attachments_count = self.session.scalar(select(func.count(AttachmentMetadata.id)))
         self.assertEqual(int(attachments_count or 0), 1)
+        counters = get_attachment_send_counters()
+        self.assertEqual(counters["success"], 1)
+        self.assertEqual(counters["failure"], 0)
 
 
 if __name__ == "__main__":

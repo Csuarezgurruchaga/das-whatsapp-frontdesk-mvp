@@ -1,6 +1,7 @@
 from __future__ import annotations
 
 from datetime import datetime, timezone
+import logging
 from pathlib import Path, PurePosixPath
 import re
 from urllib.parse import quote
@@ -42,6 +43,7 @@ from app.hard_delete import hard_delete_conversation as execute_hard_delete_conv
 from app.whatsapp import send_outbound_text
 
 router = APIRouter()
+_LOG = logging.getLogger(__name__)
 _VIEWABLE_ATTACHMENT_MIME_TYPES = {
     "application/pdf",
     "image/jpeg",
@@ -215,7 +217,18 @@ def _get_authorized_attachment(
     conversation = crud.get_conversation(db, conversation_id=conversation_id)
     if conversation is None:
         raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail="Conversation not found")
-    ensure_can_view_conversation(current_user, conversation)
+    try:
+        ensure_can_view_conversation(current_user, conversation)
+    except HTTPException as exc:
+        if exc.status_code == status.HTTP_403_FORBIDDEN:
+            _LOG.warning(
+                "proxy_attachment_auth_denied conversation_id=%s attachment_id=%s user_id=%s role=%s",
+                conversation_id,
+                attachment_id,
+                current_user.id,
+                current_user.role.value,
+            )
+        raise
 
     attachment = crud.get_attachment_by_attachment_id(db, attachment_id=attachment_id)
     if attachment is None or attachment.conversation_id != conversation_id:
@@ -229,11 +242,23 @@ def _get_authorized_attachment(
         )
         relpath = _normalize_relpath_for_proxy(attachment.storage_relpath)
     except ValueError as exc:
+        _LOG.error(
+            "proxy_attachment_path_invalid conversation_id=%s attachment_id=%s relpath=%s",
+            conversation_id,
+            attachment_id,
+            attachment.storage_relpath,
+        )
         raise HTTPException(
             status_code=status.HTTP_500_INTERNAL_SERVER_ERROR,
             detail="Attachment path is invalid",
         ) from exc
     if not absolute_path.is_file():
+        _LOG.warning(
+            "proxy_attachment_file_missing conversation_id=%s attachment_id=%s relpath=%s",
+            conversation_id,
+            attachment_id,
+            attachment.storage_relpath,
+        )
         raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail="Attachment file not found")
     return attachment, relpath
 
@@ -588,12 +613,30 @@ def authorize_export_download(
     db: Session = Depends(get_db),
 ) -> Response:
     if current_user.role != UserRole.ADMIN:
+        _LOG.warning(
+            "proxy_export_auth_denied conversation_id=%s export_id=%s user_id=%s role=%s",
+            conversation_id,
+            export_id,
+            current_user.id,
+            current_user.role.value,
+        )
         raise HTTPException(status_code=status.HTTP_403_FORBIDDEN, detail="Forbidden")
 
     conversation = crud.get_conversation(db, conversation_id=conversation_id)
     if conversation is None:
         raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail="Conversation not found")
-    ensure_can_view_conversation(current_user, conversation)
+    try:
+        ensure_can_view_conversation(current_user, conversation)
+    except HTTPException as exc:
+        if exc.status_code == status.HTTP_403_FORBIDDEN:
+            _LOG.warning(
+                "proxy_export_auth_denied conversation_id=%s export_id=%s user_id=%s role=%s",
+                conversation_id,
+                export_id,
+                current_user.id,
+                current_user.role.value,
+            )
+        raise
 
     resolved_export_id = export_id.strip()
     if _EXPORT_ID_RE.fullmatch(resolved_export_id) is None:
@@ -607,11 +650,23 @@ def authorize_export_download(
     try:
         export_path.relative_to(exports_root)
     except ValueError as exc:
+        _LOG.error(
+            "proxy_export_path_invalid conversation_id=%s export_id=%s relpath=%s",
+            conversation_id,
+            resolved_export_id,
+            relpath,
+        )
         raise HTTPException(
             status_code=status.HTTP_500_INTERNAL_SERVER_ERROR,
             detail="Export path is invalid",
         ) from exc
     if not export_path.is_file():
+        _LOG.warning(
+            "proxy_export_file_missing conversation_id=%s export_id=%s relpath=%s",
+            conversation_id,
+            resolved_export_id,
+            relpath,
+        )
         raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail="Export not found")
 
     return _build_proxy_response(
@@ -965,7 +1020,10 @@ def send_message(
     )
 
     if not result.ok:
-        raise HTTPException(status_code=status.HTTP_502_BAD_GATEWAY, detail="WhatsApp send failed")
+        raise HTTPException(
+            status_code=status.HTTP_502_BAD_GATEWAY,
+            detail="No se pudo enviar el mensaje por WhatsApp.",
+        )
 
     return SendMessageResponse(
         ok=True,
@@ -1073,7 +1131,10 @@ async def send_attachment(
     )
 
     if not result.ok:
-        raise HTTPException(status_code=status.HTTP_502_BAD_GATEWAY, detail="WhatsApp send failed")
+        raise HTTPException(
+            status_code=status.HTTP_502_BAD_GATEWAY,
+            detail="No se pudo enviar el adjunto por WhatsApp.",
+        )
 
     return SendAttachmentResponse(
         ok=True,

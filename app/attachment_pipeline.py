@@ -1,8 +1,11 @@
 from __future__ import annotations
 
+from collections import Counter
 from dataclasses import dataclass
 from datetime import datetime, timezone
 import json
+import logging
+from threading import Lock
 from uuid import uuid4
 
 from sqlalchemy.orm import Session
@@ -22,6 +25,10 @@ from app.db.models import (
 )
 from app.whatsapp import WhatsAppSendError, send_media_message, upload_media
 
+_LOG = logging.getLogger(__name__)
+_ATTACHMENT_SEND_COUNTERS: Counter[str] = Counter()
+_ATTACHMENT_SEND_COUNTERS_LOCK = Lock()
+
 
 @dataclass(frozen=True)
 class OutboundAttachmentResult:
@@ -35,6 +42,24 @@ class OutboundAttachmentResult:
 
 def _attachment_message_text(filename: str) -> str:
     return f"[attachment] {filename}"
+
+
+def _increment_attachment_send_counter(outcome: str) -> None:
+    with _ATTACHMENT_SEND_COUNTERS_LOCK:
+        _ATTACHMENT_SEND_COUNTERS[outcome] += 1
+
+
+def get_attachment_send_counters() -> dict[str, int]:
+    with _ATTACHMENT_SEND_COUNTERS_LOCK:
+        return {
+            "success": int(_ATTACHMENT_SEND_COUNTERS.get("success", 0)),
+            "failure": int(_ATTACHMENT_SEND_COUNTERS.get("failure", 0)),
+        }
+
+
+def reset_attachment_send_counters() -> None:
+    with _ATTACHMENT_SEND_COUNTERS_LOCK:
+        _ATTACHMENT_SEND_COUNTERS.clear()
 
 
 def _get_message_for_attachment(db: Session, attachment: AttachmentMetadata) -> Message | None:
@@ -163,6 +188,16 @@ def send_outbound_attachment(
             },
             ensure_ascii=True,
         )
+        _increment_attachment_send_counter("failure")
+        _LOG.warning(
+            "attachment_send_failed conversation_id=%s attachment_id=%s actor_user_id=%s "
+            "status_code=%s error=%s",
+            conversation_id,
+            attachment.attachment_id,
+            actor_user_id,
+            status_code,
+            str(exc),
+        )
         attachment.status = AttachmentStatus.FAILED
         crud.create_message_receipt(
             db,
@@ -189,6 +224,16 @@ def send_outbound_attachment(
 
     if send_response.message_id:
         message.whatsapp_message_id = send_response.message_id
+    _increment_attachment_send_counter("success")
+    _LOG.info(
+        "attachment_send_succeeded conversation_id=%s attachment_id=%s actor_user_id=%s "
+        "media_kind=%s whatsapp_message_id=%s",
+        conversation_id,
+        attachment.attachment_id,
+        actor_user_id,
+        media_kind,
+        send_response.message_id,
+    )
     attachment.status = AttachmentStatus.SENT
     crud.create_message_receipt(
         db,

@@ -63,6 +63,12 @@ class TestProxyDownloadAuthorization(unittest.TestCase):
             password_hash="hash",
             role=UserRole.AGENT,
         )
+        self.other_agent = User(
+            id=3,
+            username="other-agent",
+            password_hash="hash",
+            role=UserRole.AGENT,
+        )
         self.contact = Contact(
             id=10,
             whatsapp_number="15550001234",
@@ -74,7 +80,9 @@ class TestProxyDownloadAuthorization(unittest.TestCase):
             state=ConversationState.ASIGNADO,
             assigned_to=self.agent.id,
         )
-        self.session.add_all([self.admin, self.agent, self.contact, self.conversation])
+        self.session.add_all(
+            [self.admin, self.agent, self.other_agent, self.contact, self.conversation]
+        )
         self.session.flush()
 
         self.attachment_pdf = AttachmentMetadata(
@@ -164,6 +172,37 @@ class TestProxyDownloadAuthorization(unittest.TestCase):
         )
         self.assertIn("inline;", response.headers.get("content-disposition", ""))
 
+    def test_attachment_download_logs_auth_denial(self) -> None:
+        with self.assertLogs("app.api.conversations", level="WARNING") as logs, self.assertRaises(
+            HTTPException
+        ) as ctx:
+            conversations.authorize_attachment_download(
+                conversation_id=200,
+                attachment_id="att-pdf",
+                current_user=self.other_agent,
+                db=self.session,
+            )
+
+        self.assertEqual(ctx.exception.status_code, 403)
+        self.assertTrue(any("proxy_attachment_auth_denied" in entry for entry in logs.output))
+
+    def test_attachment_download_logs_missing_file(self) -> None:
+        (self.attachments_dir / "200" / "att-pdf_invoice.pdf").unlink()
+
+        with self.assertLogs("app.api.conversations", level="WARNING") as logs, self.assertRaises(
+            HTTPException
+        ) as ctx:
+            conversations.authorize_attachment_download(
+                conversation_id=200,
+                attachment_id="att-pdf",
+                current_user=self.agent,
+                db=self.session,
+            )
+
+        self.assertEqual(ctx.exception.status_code, 404)
+        self.assertEqual(ctx.exception.detail, "Attachment file not found")
+        self.assertTrue(any("proxy_attachment_file_missing" in entry for entry in logs.output))
+
     def test_export_download_requires_admin(self) -> None:
         with self.assertRaises(HTTPException) as ctx:
             conversations.authorize_export_download(
@@ -175,6 +214,21 @@ class TestProxyDownloadAuthorization(unittest.TestCase):
 
         self.assertEqual(ctx.exception.status_code, 403)
         self.assertEqual(ctx.exception.detail, "Forbidden")
+
+    def test_export_download_logs_role_denial(self) -> None:
+        with self.assertLogs("app.api.conversations", level="WARNING") as logs, self.assertRaises(
+            HTTPException
+        ) as ctx:
+            conversations.authorize_export_download(
+                conversation_id=200,
+                export_id="exp001",
+                current_user=self.agent,
+                db=self.session,
+            )
+
+        self.assertEqual(ctx.exception.status_code, 403)
+        self.assertEqual(ctx.exception.detail, "Forbidden")
+        self.assertTrue(any("proxy_export_auth_denied" in entry for entry in logs.output))
 
     def test_export_download_returns_accel_headers_for_admin(self) -> None:
         response = conversations.authorize_export_download(
@@ -190,6 +244,23 @@ class TestProxyDownloadAuthorization(unittest.TestCase):
             "/_internal/exports/200/conversation-200-exp001.zip",
         )
         self.assertEqual(response.headers.get("content-type"), "application/zip")
+
+    def test_export_download_logs_missing_file(self) -> None:
+        (self.exports_dir / "200" / "conversation-200-exp001.zip").unlink()
+
+        with self.assertLogs("app.api.conversations", level="WARNING") as logs, self.assertRaises(
+            HTTPException
+        ) as ctx:
+            conversations.authorize_export_download(
+                conversation_id=200,
+                export_id="exp001",
+                current_user=self.admin,
+                db=self.session,
+            )
+
+        self.assertEqual(ctx.exception.status_code, 404)
+        self.assertEqual(ctx.exception.detail, "Export not found")
+        self.assertTrue(any("proxy_export_file_missing" in entry for entry in logs.output))
 
 
 if __name__ == "__main__":

@@ -624,7 +624,8 @@ async function sendMessage() {
     await loadMessages(state.activeConversation.conversation_id, true);
     await refreshAllLists();
   } catch (err) {
-    els.composerError.textContent = "No se pudo enviar el mensaje.";
+    els.composerError.textContent =
+      err instanceof Error && err.message ? err.message : "No se pudo enviar el mensaje.";
   }
 }
 
@@ -702,7 +703,9 @@ async function sendAttachment() {
     await refreshAllLists();
   } catch (err) {
     els.composerError.textContent =
-      err instanceof Error && err.message ? err.message : "No se pudo enviar el adjunto.";
+      err instanceof Error && err.message
+        ? err.message
+        : "No se pudo enviar el adjunto por WhatsApp.";
     try {
       await loadMessages(activeConversationId, true);
       await refreshAllLists();
