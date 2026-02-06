@@ -1,12 +1,16 @@
 from __future__ import annotations
 
 from datetime import datetime, timezone
+from pathlib import Path, PurePosixPath
+import re
+from urllib.parse import quote
 
-from fastapi import APIRouter, Depends, File, Form, HTTPException, Query, UploadFile, status
+from fastapi import APIRouter, Depends, File, Form, HTTPException, Query, Response, UploadFile, status
 from pydantic import BaseModel
 from sqlalchemy import update
 from sqlalchemy.orm import Session
 
+from app.attachment_storage import resolve_attachment_storage_path
 from app.api.deps import (
     ensure_can_respond_conversation,
     ensure_can_view_conversation,
@@ -14,6 +18,7 @@ from app.api.deps import (
     get_db,
     require_roles,
 )
+from app.config import get_extras_config
 from app.db import crud
 from app.db.models import (
     Conversation,
@@ -36,6 +41,15 @@ from app.hard_delete import hard_delete_conversation as execute_hard_delete_conv
 from app.whatsapp import send_outbound_text
 
 router = APIRouter()
+_VIEWABLE_ATTACHMENT_MIME_TYPES = {
+    "application/pdf",
+    "image/jpeg",
+    "image/png",
+    "text/plain",
+}
+_EXPORT_ID_RE = re.compile(r"^[A-Za-z0-9_-]+$")
+_ATTACHMENTS_ACCEL_PREFIX = "/_internal/attachments"
+_EXPORTS_ACCEL_PREFIX = "/_internal/exports"
 
 
 class ConversationActionResponse(BaseModel):
@@ -120,6 +134,85 @@ class HardDeleteResponse(BaseModel):
     deleted_attachment_files: int
     missing_attachment_files: int
     deleted_export_files: int
+
+
+def _normalize_relpath_for_proxy(storage_relpath: str) -> str:
+    candidate = (storage_relpath or "").strip().replace("\\", "/")
+    if not candidate:
+        raise ValueError("storage_relpath is empty")
+
+    relpath = PurePosixPath(candidate)
+    if relpath.is_absolute() or ".." in relpath.parts:
+        raise ValueError("storage_relpath is invalid")
+
+    normalized = relpath.as_posix()
+    if normalized.startswith("./"):
+        normalized = normalized[2:]
+    if not normalized:
+        raise ValueError("storage_relpath is invalid")
+    return normalized
+
+
+def _build_content_disposition(filename: str, *, inline: bool) -> str:
+    disposition = "inline" if inline else "attachment"
+    safe = (filename or "").strip().replace('"', "_").replace("\r", "_").replace("\n", "_")
+    if not safe:
+        safe = "file"
+    ascii_fallback = safe.encode("ascii", "ignore").decode("ascii") or "file"
+    encoded = quote(safe, safe="")
+    return f"{disposition}; filename=\"{ascii_fallback}\"; filename*=UTF-8''{encoded}"
+
+
+def _build_proxy_response(
+    *,
+    accel_prefix: str,
+    relpath: str,
+    content_type: str,
+    filename: str,
+    inline: bool,
+) -> Response:
+    return Response(
+        status_code=status.HTTP_200_OK,
+        headers={
+            "X-Accel-Redirect": f"{accel_prefix}/{relpath}",
+            "Content-Type": content_type,
+            "Content-Disposition": _build_content_disposition(filename, inline=inline),
+            "X-Content-Type-Options": "nosniff",
+        },
+    )
+
+
+def _get_authorized_attachment(
+    *,
+    conversation_id: int,
+    attachment_id: str,
+    current_user: User,
+    db: Session,
+):
+    conversation = crud.get_conversation(db, conversation_id=conversation_id)
+    if conversation is None:
+        raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail="Conversation not found")
+    ensure_can_view_conversation(current_user, conversation)
+
+    attachment = crud.get_attachment_by_attachment_id(db, attachment_id=attachment_id)
+    if attachment is None or attachment.conversation_id != conversation_id:
+        raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail="Attachment not found")
+
+    extras = get_extras_config()
+    try:
+        absolute_path = resolve_attachment_storage_path(
+            attachments_dir=extras.attachments_dir,
+            storage_relpath=attachment.storage_relpath,
+        )
+        relpath = _normalize_relpath_for_proxy(attachment.storage_relpath)
+    except ValueError as exc:
+        raise HTTPException(
+            status_code=status.HTTP_500_INTERNAL_SERVER_ERROR,
+            detail="Attachment path is invalid",
+        ) from exc
+    if not absolute_path.is_file():
+        raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail="Attachment file not found")
+    return attachment, relpath
 
 
 @router.get("", response_model=list[ConversationSummary])
@@ -252,6 +345,99 @@ def list_messages(
         )
         for message in messages
     ]
+
+
+@router.get("/{conversation_id}/attachments/{attachment_id}/download")
+def authorize_attachment_download(
+    conversation_id: int,
+    attachment_id: str,
+    current_user: User = Depends(get_current_user),
+    db: Session = Depends(get_db),
+) -> Response:
+    attachment, relpath = _get_authorized_attachment(
+        conversation_id=conversation_id,
+        attachment_id=attachment_id,
+        current_user=current_user,
+        db=db,
+    )
+
+    return _build_proxy_response(
+        accel_prefix=_ATTACHMENTS_ACCEL_PREFIX,
+        relpath=relpath,
+        content_type=attachment.mime,
+        filename=attachment.original_filename,
+        inline=False,
+    )
+
+
+@router.get("/{conversation_id}/attachments/{attachment_id}/view")
+def authorize_attachment_view(
+    conversation_id: int,
+    attachment_id: str,
+    current_user: User = Depends(get_current_user),
+    db: Session = Depends(get_db),
+) -> Response:
+    attachment, relpath = _get_authorized_attachment(
+        conversation_id=conversation_id,
+        attachment_id=attachment_id,
+        current_user=current_user,
+        db=db,
+    )
+    if attachment.mime not in _VIEWABLE_ATTACHMENT_MIME_TYPES:
+        raise HTTPException(
+            status_code=status.HTTP_400_BAD_REQUEST,
+            detail="Attachment MIME is not viewable",
+        )
+    return _build_proxy_response(
+        accel_prefix=_ATTACHMENTS_ACCEL_PREFIX,
+        relpath=relpath,
+        content_type=attachment.mime,
+        filename=attachment.original_filename,
+        inline=True,
+    )
+
+
+@router.get("/{conversation_id}/exports/{export_id}/download")
+def authorize_export_download(
+    conversation_id: int,
+    export_id: str,
+    current_user: User = Depends(require_roles(UserRole.ADMIN)),
+    db: Session = Depends(get_db),
+) -> Response:
+    if current_user.role != UserRole.ADMIN:
+        raise HTTPException(status_code=status.HTTP_403_FORBIDDEN, detail="Forbidden")
+
+    conversation = crud.get_conversation(db, conversation_id=conversation_id)
+    if conversation is None:
+        raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail="Conversation not found")
+    ensure_can_view_conversation(current_user, conversation)
+
+    resolved_export_id = export_id.strip()
+    if _EXPORT_ID_RE.fullmatch(resolved_export_id) is None:
+        raise HTTPException(status_code=status.HTTP_400_BAD_REQUEST, detail="Invalid export id")
+
+    filename = f"conversation-{conversation_id}-{resolved_export_id}.zip"
+    relpath = _normalize_relpath_for_proxy(f"{conversation_id}/{filename}")
+    extras = get_extras_config()
+    exports_root = Path(extras.exports_dir).expanduser().resolve()
+    export_path = (exports_root / relpath).resolve()
+    try:
+        export_path.relative_to(exports_root)
+    except ValueError as exc:
+        raise HTTPException(
+            status_code=status.HTTP_500_INTERNAL_SERVER_ERROR,
+            detail="Export path is invalid",
+        ) from exc
+    if not export_path.is_file():
+        raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail="Export not found")
+
+    return _build_proxy_response(
+        accel_prefix=_EXPORTS_ACCEL_PREFIX,
+        relpath=relpath,
+        content_type="application/zip",
+        filename=filename,
+        inline=False,
+    )
 
 
 @router.post("/{conversation_id}/take", response_model=ConversationActionResponse)
