@@ -41,3 +41,10 @@
 - solution: Added Extras runtime config scaffold in `app/config.py` (`ATTACHMENTS_DIR`, `EXPORTS_DIR`, `EXPORTS_TTL_DAYS`, and four `FEATURE_*` toggles), documented role/config/flag matrix in `docs/specs/whatsapp-frontdesk-extensions/CONFIG.md`, and advanced spec execution tracking (`TASKS.md` + new `CHECKPOINT.md`).
 - notes: `supervisor` remains a planned role to introduce in later Extras tasks; current Core role mapping is preserved for now (`operator -> agent`).
 - proof: `python3 -c "from app.config import get_extras_config; print(get_extras_config())"`
+
+- date: 2026-02-06
+- context: `app/db/models.py`, `app/db/crud.py`, `alembic/versions/20260206_01_add_attachment_metadata_table.py` (Task `T1.1`)
+- problem: Extras required attachment metadata persistence (schema + CRUD) with stable retry semantics by `attachment_id` and query by `conversation_id`.
+- solution: Added `AttachmentMetadata` model and `AttachmentStatus` enum, created Alembic migration with required FKs/constraints/indexes, and implemented CRUD helpers including idempotent `get_or_create_attachment_metadata`.
+- notes: Full `alembic upgrade head` against SQLite fails due pre-existing revision `20260202_03` using unsupported `ALTER COLUMN ... DROP NOT NULL`; validated T1.1 behavior with isolated SQLAlchemy roundtrip instead.
+- proof: `.venv/bin/python - <<'PY' ... T1.1 CRUD roundtrip OK ... PY`

@@ -4,12 +4,14 @@ Last updated: 2026-02-06
 
 ## Completed
 - T0.1 align configs, roles, and feature flags.
-- Added env/flag scaffolding in `app/config.py`.
-- Documented env vars, flags, and role matrix in `docs/specs/whatsapp-frontdesk-extensions/CONFIG.md`.
+- T1.1 implement attachment metadata model (schema/model + CRUD).
+- Added `AttachmentMetadata` + `AttachmentStatus` in `app/db/models.py`.
+- Added CRUD helpers in `app/db/crud.py`: create/get/list/get_or_create by `attachment_id`.
+- Added migration `alembic/versions/20260206_01_add_attachment_metadata_table.py`.
 
 ## Current / Next
-- Next task: T1.1 Implement attachment metadata model.
-- Status: READY
+- Next task: T1.2 Implement `safe(truncate(filename))` + MIME validation.
+- Status: READY_FOR_T1.2
 
 ## Important constraints
 - Attachment/export storage roots are configurable via env (`ATTACHMENTS_DIR`, `EXPORTS_DIR`).
@@ -18,8 +20,10 @@ Last updated: 2026-02-06
 
 ## Gotchas / Risks discovered
 - Core currently models only `agent/admin`; `supervisor` must be introduced explicitly in later task scope.
-- No stable automated test suite is currently runnable in this environment without extra setup.
+- Existing migration `20260202_03` is not SQLite-compatible (`ALTER COLUMN ... DROP NOT NULL`), so full `alembic upgrade head` fails on SQLite.
+- T1.1 behavior was verified via isolated SQLAlchemy roundtrip using in-memory SQLite (`Base.metadata.create_all`) instead.
 
 ## Safe resume instructions
 - Continue on `impl/whatsapp-frontdesk-extensions`.
-- Start with T1.1 schema/model work; preserve T0.1 env names and flag names.
+- Start with T1.2 library helpers for filename sanitization and MIME/extension validation.
+- Preserve T1.1 contracts: required metadata fields, unique `attachment_id`, and indexes on `conversation_id` + `message_id`.
