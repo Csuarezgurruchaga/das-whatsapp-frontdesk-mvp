@@ -32,3 +32,12 @@
 - Config artifacts live under `./config/`
 - Default bot YAML path: `./config/bot.yaml` (env `BOT_MENU_YAML_PATH`)
 - Reverse proxy terminates TLS and forwards `X-Forwarded-*` headers
+
+## 2026-02-06 Development log
+
+- date: 2026-02-06
+- context: `docs/specs/whatsapp-frontdesk-extensions` + `app/config.py` (Task `T0.1`)
+- problem: Extras spec required explicit baseline for env vars, role semantics, and feature flags before backend/UI tasks, but Core only had partial runtime config and only `agent/admin` roles.
+- solution: Added Extras runtime config scaffold in `app/config.py` (`ATTACHMENTS_DIR`, `EXPORTS_DIR`, `EXPORTS_TTL_DAYS`, and four `FEATURE_*` toggles), documented role/config/flag matrix in `docs/specs/whatsapp-frontdesk-extensions/CONFIG.md`, and advanced spec execution tracking (`TASKS.md` + new `CHECKPOINT.md`).
+- notes: `supervisor` remains a planned role to introduce in later Extras tasks; current Core role mapping is preserved for now (`operator -> agent`).
+- proof: `python3 -c "from app.config import get_extras_config; print(get_extras_config())"`
