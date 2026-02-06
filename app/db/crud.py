@@ -6,6 +6,8 @@ from sqlalchemy import func, select, update
 from sqlalchemy.orm import Session
 
 from .models import (
+    AttachmentMetadata,
+    AttachmentStatus,
     Contact,
     Conversation,
     ConversationReadState,
@@ -371,6 +373,95 @@ def list_message_receipts_by_whatsapp_message_id(
         .offset(offset)
     )
     return list(session.scalars(stmt))
+
+
+def create_attachment_metadata(
+    session: Session,
+    *,
+    conversation_id: int,
+    message_id: int | None,
+    attachment_id: str,
+    original_filename: str,
+    mime: str,
+    size_bytes: int,
+    storage_relpath: str,
+    status: AttachmentStatus,
+    created_by: int,
+) -> AttachmentMetadata:
+    attachment = AttachmentMetadata(
+        conversation_id=conversation_id,
+        message_id=message_id,
+        attachment_id=attachment_id,
+        original_filename=original_filename,
+        mime=mime,
+        size_bytes=size_bytes,
+        storage_relpath=storage_relpath,
+        status=status,
+        created_by=created_by,
+    )
+    session.add(attachment)
+    return attachment
+
+
+def get_attachment_by_attachment_id(
+    session: Session,
+    *,
+    attachment_id: str,
+) -> AttachmentMetadata | None:
+    stmt = (
+        select(AttachmentMetadata)
+        .where(AttachmentMetadata.attachment_id == attachment_id)
+        .limit(1)
+    )
+    return session.scalar(stmt)
+
+
+def list_attachments_by_conversation(
+    session: Session,
+    *,
+    conversation_id: int,
+    limit: int = 200,
+    offset: int = 0,
+) -> list[AttachmentMetadata]:
+    stmt = (
+        select(AttachmentMetadata)
+        .where(AttachmentMetadata.conversation_id == conversation_id)
+        .order_by(AttachmentMetadata.created_at.asc())
+        .limit(limit)
+        .offset(offset)
+    )
+    return list(session.scalars(stmt))
+
+
+def get_or_create_attachment_metadata(
+    session: Session,
+    *,
+    conversation_id: int,
+    message_id: int | None,
+    attachment_id: str,
+    original_filename: str,
+    mime: str,
+    size_bytes: int,
+    storage_relpath: str,
+    status: AttachmentStatus,
+    created_by: int,
+) -> AttachmentMetadata:
+    existing = get_attachment_by_attachment_id(session, attachment_id=attachment_id)
+    if existing is not None:
+        return existing
+
+    return create_attachment_metadata(
+        session,
+        conversation_id=conversation_id,
+        message_id=message_id,
+        attachment_id=attachment_id,
+        original_filename=original_filename,
+        mime=mime,
+        size_bytes=size_bytes,
+        storage_relpath=storage_relpath,
+        status=status,
+        created_by=created_by,
+    )
 
 
 def get_user_by_username(session: Session, *, username: str) -> User | None:

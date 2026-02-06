@@ -56,6 +56,12 @@ class MessageReceiptStatus(enum.Enum):
     FAILED = "failed"
 
 
+class AttachmentStatus(enum.Enum):
+    UPLOADING = "uploading"
+    SENT = "sent"
+    FAILED = "failed"
+
+
 class User(Base):
     __tablename__ = "users"
 
@@ -168,6 +174,37 @@ class Message(Base):
     )
 
     conversation = relationship("Conversation")
+
+
+class AttachmentMetadata(Base):
+    __tablename__ = "attachment_metadata"
+    __table_args__ = (
+        UniqueConstraint("attachment_id", name="uq_attachment_metadata_attachment_id"),
+        Index("ix_attachment_metadata_conversation_id", "conversation_id"),
+        Index("ix_attachment_metadata_message_id", "message_id"),
+    )
+
+    id: Mapped[int] = mapped_column(BigInteger, primary_key=True)
+    conversation_id: Mapped[int] = mapped_column(
+        ForeignKey("conversations.id"), nullable=False
+    )
+    message_id: Mapped[int | None] = mapped_column(ForeignKey("messages.id"))
+    attachment_id: Mapped[str] = mapped_column(String(64), nullable=False)
+    original_filename: Mapped[str] = mapped_column(String(255), nullable=False)
+    mime: Mapped[str] = mapped_column(String(255), nullable=False)
+    size_bytes: Mapped[int] = mapped_column(BigInteger, nullable=False)
+    storage_relpath: Mapped[str] = mapped_column(String(1024), nullable=False)
+    status: Mapped[AttachmentStatus] = mapped_column(
+        Enum(AttachmentStatus, name="attachment_status"), nullable=False
+    )
+    created_by: Mapped[int] = mapped_column(ForeignKey("users.id"), nullable=False)
+    created_at: Mapped[object] = mapped_column(
+        DateTime(timezone=True), server_default=func.now(), nullable=False
+    )
+
+    conversation = relationship("Conversation")
+    message = relationship("Message")
+    created_by_user = relationship("User")
 
 
 class ConversationEvent(Base):
