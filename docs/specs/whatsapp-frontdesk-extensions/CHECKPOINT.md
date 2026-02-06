@@ -1,22 +1,27 @@
 # CHECKPOINT — whatsapp-frontdesk-extensions
 
 Last updated: 2026-02-06
-- Completed: `T0.1`, `T1.1`, `T1.2`.
-- Branch: `impl/whatsapp-frontdesk-extensions`.
-- Status: `READY_FOR_T1.3`.
 
-## What changed in T1.2
-- Added `app/attachments.py` with reusable helpers for `safe(truncate(filename))`, MIME allowlist/extension fallback, and size validation.
-- Enforced constants: 100MB global limit, MIME allowlist from SPEC, per-type caps (image 5MB, audio/video 16MB, document 100MB).
-- Added unit tests in `tests/test_attachment_validation.py` covering separators, `..`, long names, Unicode NFC, octet-stream fallback, allowlist rejection, and per-type size caps.
+## Completed
+- T0.1 Align configs, roles, and feature flags.
+- T1.1 Implement attachment metadata model.
+- T1.2 Implement `safe(truncate(filename))` + MIME validation.
+- T1.3 Implement attachment binary storage on NAS.
 
-## Next task
-- `T1.3`: store binaries under `ATTACHMENTS_DIR/<conversation_id>/<attachment_id>_<safe_filename>` and persist matching `storage_relpath`.
-- Reuse `app/attachments.py` helpers; do not duplicate sanitization/validation rules.
+## Current / Next
+- Next task: T1.4 Implement attachment upload + send pipeline (WhatsApp native media).
+- Status: READY.
 
-## Known constraints / gotchas
-- Existing migration `20260202_03` is SQLite-incompatible (`ALTER COLUMN ... DROP NOT NULL`), so full `alembic upgrade head` may fail on SQLite.
-- Preserve T1.1 contracts: required metadata fields, unique `attachment_id`, indexes on `conversation_id` and `message_id`.
+## Important constraints
+- Keep storage path format `ATTACHMENTS_DIR/<conversation_id>/<attachment_id>_<safe_filename>`.
+- Reuse `app/attachments.py` for sanitization and MIME/size validation; do not duplicate rules.
+- Keep metadata `storage_relpath` aligned with on-disk path for later `X-Accel-Redirect`.
 
-## Verification proof
-- `python3 -m unittest -v tests/test_attachment_validation.py`
+## Gotchas / Risks discovered
+- Full `alembic upgrade head` still fails on SQLite because prior migration `20260202_03` uses unsupported `ALTER COLUMN ... DROP NOT NULL`.
+- SQLite tests require explicit IDs for `BigInteger` PK in `attachment_metadata` (test setup sets `attachment.id` before flush).
+
+## Safe resume instructions
+- Continue from branch `impl/whatsapp-frontdesk-extensions`.
+- Implement T1.4 using `store_attachment_binary` from `app/attachment_storage.py` and existing metadata CRUD.
+- Re-run: `.venv/bin/python -m unittest -v tests/test_attachment_storage.py tests/test_attachment_validation.py`.
