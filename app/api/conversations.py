@@ -2,7 +2,7 @@ from __future__ import annotations
 
 from datetime import datetime, timezone
 
-from fastapi import APIRouter, Depends, HTTPException, Query, status
+from fastapi import APIRouter, Depends, File, Form, HTTPException, Query, UploadFile, status
 from pydantic import BaseModel
 from sqlalchemy import update
 from sqlalchemy.orm import Session
@@ -31,6 +31,7 @@ from app.realtime import (
     make_recipient_filter_for_conversation_update,
     make_recipient_filter_for_message,
 )
+from app.attachment_pipeline import send_outbound_attachment
 from app.whatsapp import send_outbound_text
 
 router = APIRouter()
@@ -67,11 +68,20 @@ class ConversationDetail(BaseModel):
     previous_conversation_id: int | None
 
 
+class MessageAttachmentOut(BaseModel):
+    attachment_id: str
+    filename: str
+    mime: str
+    size_bytes: int
+    status: str
+
+
 class MessageOut(BaseModel):
     message_id: int
     direction: str
     sender_type: str
     text: str | None
+    attachment: MessageAttachmentOut | None = None
     created_at: datetime | None
 
 
@@ -87,6 +97,15 @@ class SendMessageResponse(BaseModel):
     ok: bool
     conversation_id: int
     message_id: int
+    whatsapp_message_id: str | None
+
+
+class SendAttachmentResponse(BaseModel):
+    ok: bool
+    conversation_id: int
+    message_id: int
+    attachment_id: str
+    status: str
     whatsapp_message_id: str | None
 
 
@@ -192,12 +211,30 @@ def list_messages(
         )
         db.commit()
 
+    attachments = crud.list_attachments_by_conversation(db, conversation_id=conversation_id)
+    attachments_by_message_id = {
+        attachment.message_id: attachment
+        for attachment in attachments
+        if attachment.message_id is not None
+    }
+
     return [
         MessageOut(
             message_id=message.id,
             direction=message.direction.value,
             sender_type=message.sender_type.value,
             text=message.text,
+            attachment=(
+                MessageAttachmentOut(
+                    attachment_id=attachment.attachment_id,
+                    filename=attachment.original_filename,
+                    mime=attachment.mime,
+                    size_bytes=attachment.size_bytes,
+                    status=attachment.status.value,
+                )
+                if (attachment := attachments_by_message_id.get(message.id)) is not None
+                else None
+            ),
             created_at=message.created_at,
         )
         for message in messages
@@ -512,5 +549,115 @@ def send_message(
         ok=True,
         conversation_id=conversation_id,
         message_id=result.message_id,
+        whatsapp_message_id=result.whatsapp_message_id,
+    )
+
+
+@router.post("/{conversation_id}/attachments", response_model=SendAttachmentResponse)
+async def send_attachment(
+    conversation_id: int,
+    file: UploadFile = File(...),
+    attachment_id: str | None = Form(default=None),
+    current_user: User = Depends(get_current_user),
+    db: Session = Depends(get_db),
+) -> SendAttachmentResponse:
+    conversation = crud.get_conversation(db, conversation_id=conversation_id)
+    if conversation is None:
+        raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail="Conversation not found")
+
+    ensure_can_respond_conversation(current_user, conversation)
+
+    if conversation.contact is None:
+        raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail="Contact not found")
+
+    content = await file.read()
+    original_filename = (file.filename or "").strip() or "file"
+    now = datetime.now(timezone.utc)
+
+    try:
+        result = send_outbound_attachment(
+            db,
+            conversation_id=conversation_id,
+            to_number=conversation.contact.whatsapp_number,
+            actor_user_id=current_user.id,
+            original_filename=original_filename,
+            reported_mime=file.content_type,
+            content=content,
+            attachment_id=attachment_id,
+            now=now,
+        )
+    except ValueError as exc:
+        detail = str(exc) or "Invalid attachment"
+        status_code = (
+            status.HTTP_409_CONFLICT
+            if "another conversation" in detail
+            else status.HTTP_400_BAD_REQUEST
+        )
+        raise HTTPException(status_code=status_code, detail=detail) from exc
+    except RuntimeError as exc:
+        raise HTTPException(
+            status_code=status.HTTP_500_INTERNAL_SERVER_ERROR,
+            detail="Attachment pipeline configuration error",
+        ) from exc
+    except OSError as exc:
+        raise HTTPException(
+            status_code=status.HTTP_500_INTERNAL_SERVER_ERROR,
+            detail="Attachment storage failed",
+        ) from exc
+
+    db.commit()
+
+    attachment = crud.get_attachment_by_attachment_id(db, attachment_id=result.attachment_id)
+    attachment_payload = None
+    if attachment is not None:
+        attachment_payload = {
+            "attachment_id": attachment.attachment_id,
+            "filename": attachment.original_filename,
+            "mime": attachment.mime,
+            "size_bytes": attachment.size_bytes,
+            "status": attachment.status.value,
+        }
+
+    dispatch_event(
+        build_message_event(
+            conversation_id=conversation_id,
+            message_id=result.message_id,
+            direction=MessageDirection.OUTBOUND.value,
+            sender_type=SenderType.AGENT.value,
+            text=f"[attachment] {original_filename}",
+            whatsapp_message_id=result.whatsapp_message_id,
+            created_at=now,
+            conversation_state=conversation.state,
+            assigned_to=conversation.assigned_to,
+            attachment=attachment_payload,
+        ),
+        make_recipient_filter_for_message(
+            state=conversation.state,
+            assigned_to=conversation.assigned_to,
+        ),
+    )
+    dispatch_event(
+        build_conversation_event(
+            conversation_id=conversation_id,
+            state=conversation.state,
+            assigned_to=conversation.assigned_to,
+            last_activity_at=now,
+            reason="message",
+        ),
+        make_recipient_filter_for_conversation_update(
+            state=conversation.state,
+            assigned_to=conversation.assigned_to,
+        ),
+    )
+
+    if not result.ok:
+        raise HTTPException(status_code=status.HTTP_502_BAD_GATEWAY, detail="WhatsApp send failed")
+
+    return SendAttachmentResponse(
+        ok=True,
+        conversation_id=conversation_id,
+        message_id=result.message_id,
+        attachment_id=result.attachment_id,
+        status=result.status.value,
         whatsapp_message_id=result.whatsapp_message_id,
     )

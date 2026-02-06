@@ -6,6 +6,7 @@ import json
 import os
 from urllib.error import HTTPError, URLError
 from urllib.request import Request, urlopen
+from uuid import uuid4
 
 from sqlalchemy.orm import Session
 
@@ -57,6 +58,11 @@ def _build_messages_url() -> str:
     return f"https://graph.facebook.com/{_GRAPH_API_VERSION}/{phone_number_id}/messages"
 
 
+def _build_media_url() -> str:
+    phone_number_id = _get_phone_number_id()
+    return f"https://graph.facebook.com/{_GRAPH_API_VERSION}/{phone_number_id}/media"
+
+
 def _parse_json_payload(raw: bytes | None) -> dict | None:
     if not raw:
         return None
@@ -66,20 +72,13 @@ def _parse_json_payload(raw: bytes | None) -> dict | None:
         return None
 
 
-def send_text_message(*, to_number: str, text: str) -> WhatsAppSendResponse:
-    payload = {
-        "messaging_product": "whatsapp",
-        "to": to_number,
-        "type": "text",
-        "text": {"body": text},
-    }
-    body = json.dumps(payload).encode("utf-8")
+def _post_whatsapp_request(*, url: str, body: bytes, content_type: str) -> dict:
     request = Request(
-        _build_messages_url(),
+        url,
         data=body,
         headers={
             "Authorization": f"Bearer {_get_access_token()}",
-            "Content-Type": "application/json",
+            "Content-Type": content_type,
         },
         method="POST",
     )
@@ -100,15 +99,98 @@ def send_text_message(*, to_number: str, text: str) -> WhatsAppSendResponse:
             f"WhatsApp send failed: {exc.reason}", status_code=None, payload=None
         ) from exc
 
-    response_payload = _parse_json_payload(raw) or {}
+    return _parse_json_payload(raw) or {}
+
+
+def _extract_message_id(response_payload: dict) -> str | None:
     message_id = None
     messages = response_payload.get("messages")
     if isinstance(messages, list) and messages:
         first = messages[0]
         if isinstance(first, dict):
             message_id = first.get("id")
+    return message_id
 
-    return WhatsAppSendResponse(message_id=message_id, payload=response_payload)
+
+def send_text_message(*, to_number: str, text: str) -> WhatsAppSendResponse:
+    payload = {
+        "messaging_product": "whatsapp",
+        "to": to_number,
+        "type": "text",
+        "text": {"body": text},
+    }
+    response_payload = _post_whatsapp_request(
+        url=_build_messages_url(),
+        body=json.dumps(payload).encode("utf-8"),
+        content_type="application/json",
+    )
+    return WhatsAppSendResponse(
+        message_id=_extract_message_id(response_payload),
+        payload=response_payload,
+    )
+
+
+def upload_media(*, filename: str, mime: str, content: bytes) -> str:
+    boundary = f"----CodexBoundary{uuid4().hex}"
+    safe_filename = filename.replace('"', "_")
+    chunks = [
+        (
+            f"--{boundary}\r\n"
+            'Content-Disposition: form-data; name="messaging_product"\r\n\r\n'
+            "whatsapp\r\n"
+        ).encode("utf-8"),
+        (
+            f"--{boundary}\r\n"
+            f'Content-Disposition: form-data; name="file"; filename="{safe_filename}"\r\n'
+            f"Content-Type: {mime}\r\n\r\n"
+        ).encode("utf-8"),
+        content,
+        b"\r\n",
+        f"--{boundary}--\r\n".encode("utf-8"),
+    ]
+    body = b"".join(chunks)
+    response_payload = _post_whatsapp_request(
+        url=_build_media_url(),
+        body=body,
+        content_type=f"multipart/form-data; boundary={boundary}",
+    )
+    media_id = response_payload.get("id")
+    if not isinstance(media_id, str) or not media_id.strip():
+        raise WhatsAppSendError(
+            "WhatsApp media upload failed: missing media id",
+            status_code=None,
+            payload=response_payload,
+        )
+    return media_id.strip()
+
+
+def send_media_message(
+    *,
+    to_number: str,
+    media_kind: str,
+    media_id: str,
+    filename: str | None = None,
+) -> WhatsAppSendResponse:
+    if media_kind not in {"image", "audio", "video", "document"}:
+        raise ValueError(f"Unsupported media kind: {media_kind}")
+    media_object: dict[str, str] = {"id": media_id}
+    if media_kind == "document" and filename:
+        media_object["filename"] = filename
+    payload = {
+        "messaging_product": "whatsapp",
+        "to": to_number,
+        "type": media_kind,
+        media_kind: media_object,
+    }
+    response_payload = _post_whatsapp_request(
+        url=_build_messages_url(),
+        body=json.dumps(payload).encode("utf-8"),
+        content_type="application/json",
+    )
+    return WhatsAppSendResponse(
+        message_id=_extract_message_id(response_payload),
+        payload=response_payload,
+    )
 
 
 def send_outbound_text(

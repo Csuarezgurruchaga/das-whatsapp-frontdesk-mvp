@@ -88,6 +88,7 @@ def build_message_event(
     created_at: datetime | None,
     conversation_state: ConversationState,
     assigned_to: int | None,
+    attachment: dict | None = None,
 ) -> dict:
     return {
         "type": "message.new",
@@ -101,6 +102,7 @@ def build_message_event(
             "created_at": _serialize_datetime(created_at),
             "conversation_state": conversation_state.value,
             "assigned_to": assigned_to,
+            "attachment": attachment,
         },
     }
 
