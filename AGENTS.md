@@ -97,3 +97,10 @@
 - solution: Regla operativa confirmada: usar siempre URL `https://github.com/...` para git con red y autenticación por `GIT_ASKPASS` con token desde variable de entorno `GITHUB_PRIVATE_ACCESS_TOKEN` (no usar `GITHUB_PERSONAL_ACCESS_TOKEN` para este flujo).
 - notes: Mantener `GIT_CONFIG_GLOBAL=/dev/null` para evitar rewrite global `https -> ssh`.
 - proof: `GIT_CONFIG_GLOBAL=/dev/null GIT_ASKPASS=/tmp/git-askpass.sh GITHUB_TOKEN=$GITHUB_PRIVATE_ACCESS_TOKEN git push https://github.com/Csuarezgurruchaga/das-whatsapp-frontdesk-mvp.git impl/whatsapp-frontdesk-extensions`
+
+- date: 2026-02-06
+- context: `app/{attachment_pipeline.py,api/conversations.py,static/app.js}` + `tests/{test_attachment_pipeline.py,test_proxy_download_authorization.py}` (Task `T3.1`)
+- problem: Extras needed explicit observability for attachment send outcomes and proxy authorization/missing-file failures, plus clearer operator-facing errors for send failures.
+- solution: Added attachment send success/failure counters and structured logs, added proxy auth-denial + missing-file logs in download authorization endpoints, and surfaced backend send-failure details in composer UI for text/attachment sends.
+- notes: Metrics are in-process counters intended for task-level instrumentation; they reset on process restart and are validated in unit tests.
+- proof: `.venv/bin/python -m unittest -v tests/test_attachment_pipeline.py tests/test_proxy_download_authorization.py && node --check app/static/app.js && .venv/bin/python -m unittest discover -s tests -v`
