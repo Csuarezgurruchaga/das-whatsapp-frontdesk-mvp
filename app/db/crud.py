@@ -10,6 +10,7 @@ from .models import (
     AttachmentStatus,
     Contact,
     Conversation,
+    ConversationDeletionEvent,
     ConversationReadState,
     ConversationState,
     ConversationEvent,
@@ -313,6 +314,50 @@ def list_conversation_events(
         select(ConversationEvent)
         .where(ConversationEvent.conversation_id == conversation_id)
         .order_by(ConversationEvent.created_at.desc())
+        .limit(limit)
+        .offset(offset)
+    )
+    return list(session.scalars(stmt))
+
+
+def create_conversation_deletion_event(
+    session: Session,
+    *,
+    conversation_id: int,
+    actor_user_id: int,
+    reason: str | None = None,
+    created_at: datetime | None = None,
+) -> ConversationDeletionEvent:
+    bind = session.get_bind()
+    if bind.dialect.name == "sqlite":
+        next_id_stmt = select(func.coalesce(func.max(ConversationDeletionEvent.id), 0))
+        next_id = int(session.scalar(next_id_stmt) or 0) + 1
+    else:
+        next_id = None
+
+    event = ConversationDeletionEvent(
+        id=next_id,
+        conversation_id=conversation_id,
+        actor_user_id=actor_user_id,
+        reason=reason,
+    )
+    if created_at is not None:
+        event.created_at = created_at
+    session.add(event)
+    return event
+
+
+def list_conversation_deletion_events(
+    session: Session,
+    *,
+    conversation_id: int,
+    limit: int = 100,
+    offset: int = 0,
+) -> list[ConversationDeletionEvent]:
+    stmt = (
+        select(ConversationDeletionEvent)
+        .where(ConversationDeletionEvent.conversation_id == conversation_id)
+        .order_by(ConversationDeletionEvent.created_at.desc())
         .limit(limit)
         .offset(offset)
     )

@@ -32,6 +32,7 @@ from app.realtime import (
     make_recipient_filter_for_message,
 )
 from app.attachment_pipeline import send_outbound_attachment
+from app.hard_delete import hard_delete_conversation as execute_hard_delete_conversation
 from app.whatsapp import send_outbound_text
 
 router = APIRouter()
@@ -107,6 +108,18 @@ class SendAttachmentResponse(BaseModel):
     attachment_id: str
     status: str
     whatsapp_message_id: str | None
+
+
+class HardDeleteRequest(BaseModel):
+    reason: str | None = None
+
+
+class HardDeleteResponse(BaseModel):
+    ok: bool
+    conversation_id: int
+    deleted_attachment_files: int
+    missing_attachment_files: int
+    deleted_export_files: int
 
 
 @router.get("", response_model=list[ConversationSummary])
@@ -476,6 +489,46 @@ def close_conversation(
         conversation_id=conversation_id,
         state=ConversationState.CERRADO.value,
         assigned_to=None,
+    )
+
+
+@router.post("/{conversation_id}/hard-delete", response_model=HardDeleteResponse)
+def hard_delete_conversation(
+    conversation_id: int,
+    payload: HardDeleteRequest | None = None,
+    current_user: User = Depends(require_roles(UserRole.ADMIN)),
+    db: Session = Depends(get_db),
+) -> HardDeleteResponse:
+    reason = payload.reason if payload is not None else None
+    try:
+        result = execute_hard_delete_conversation(
+            db,
+            conversation_id=conversation_id,
+            actor_user_id=current_user.id,
+            reason=reason,
+        )
+    except ValueError as exc:
+        raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail="Conversation not found") from exc
+    except PermissionError as exc:
+        raise HTTPException(status_code=status.HTTP_403_FORBIDDEN, detail="Forbidden") from exc
+    except OSError as exc:
+        raise HTTPException(
+            status_code=status.HTTP_500_INTERNAL_SERVER_ERROR,
+            detail="Hard delete failed while removing files",
+        ) from exc
+    except RuntimeError as exc:
+        raise HTTPException(
+            status_code=status.HTTP_500_INTERNAL_SERVER_ERROR,
+            detail="Hard delete failed",
+        ) from exc
+
+    db.commit()
+    return HardDeleteResponse(
+        ok=True,
+        conversation_id=result.conversation_id,
+        deleted_attachment_files=result.deleted_attachment_files,
+        missing_attachment_files=result.missing_attachment_files,
+        deleted_export_files=result.deleted_export_files,
     )
 
 

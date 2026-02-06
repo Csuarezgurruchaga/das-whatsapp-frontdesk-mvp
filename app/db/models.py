@@ -229,6 +229,24 @@ class ConversationEvent(Base):
     actor_user = relationship("User")
 
 
+class ConversationDeletionEvent(Base):
+    __tablename__ = "conversation_deletion_events"
+    __table_args__ = (
+        Index("ix_conversation_deletion_events_conversation_id", "conversation_id"),
+        Index("ix_conversation_deletion_events_created_at", "created_at"),
+    )
+
+    id: Mapped[int] = mapped_column(BigInteger, primary_key=True)
+    conversation_id: Mapped[int] = mapped_column(BigInteger, nullable=False)
+    actor_user_id: Mapped[int] = mapped_column(ForeignKey("users.id"), nullable=False)
+    reason: Mapped[str | None] = mapped_column(Text)
+    created_at: Mapped[object] = mapped_column(
+        DateTime(timezone=True), server_default=func.now(), nullable=False
+    )
+
+    actor_user = relationship("User")
+
+
 class MessageReceipt(Base):
     __tablename__ = "message_receipts"
     __table_args__ = (
