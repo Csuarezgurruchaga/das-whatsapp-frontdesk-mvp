@@ -62,3 +62,10 @@
 - solution: Added TTL cleanup module that uses ZIP mtime as timestamp source, deletes only files that match the export naming convention, removes empty per-conversation export directories, and provides dry-run execution via `python -m app.export_cleanup --dry-run`.
 - notes: Cleanup intentionally skips non-export ZIP files to reduce accidental deletions from `EXPORTS_DIR`.
 - proof: `.venv/bin/python -m unittest -v tests/test_export_cleanup.py`
+
+- date: 2026-02-06
+- context: `app/hard_delete.py`, `app/api/conversations.py`, `app/db/{models.py,crud.py}`, `alembic/versions/20260206_02_add_conversation_deletion_events_table.py`, `tests/test_hard_delete.py` (Task `T1.7`)
+- problem: Extras required an admin-only hard delete flow that removes conversation artifacts (DB + filesystem) and still preserves a minimal deletion audit record after the conversation row is gone.
+- solution: Implemented `hard_delete_conversation` service + admin API endpoint, added DB cleanup ordering for dependent tables, file cleanup for attachments/exports, and introduced `conversation_deletion_events` (no FK to conversations) to persist `conversation_id`, actor, timestamp, and optional reason after hard delete.
+- notes: Added SQLite-only ID fallback in `create_conversation_deletion_event` to keep deterministic tests working with the existing BigInteger PK pattern.
+- proof: `.venv/bin/python -m unittest -v tests/test_hard_delete.py`

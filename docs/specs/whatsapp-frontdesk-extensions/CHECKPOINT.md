@@ -3,23 +3,31 @@
 Last updated: 2026-02-06
 
 ## Completed in latest chunk
-- Task completed: T1.6 Implement exports TTL cleanup.
-- Added `app/export_cleanup.py` with deterministic TTL cleanup based on file mtime.
-- Cleanup now targets only valid export ZIP naming (`conversation-<conversation_id>-<export_id>.zip`) to avoid deleting unrelated files.
-- Added dry-run mode (`python -m app.export_cleanup --dry-run`) for safe staging validation.
-- Empty per-conversation export directories are removed after cleanup when they become empty.
-- Added coverage in `tests/test_export_cleanup.py` for expired deletion, dry-run behavior, and non-export ZIP safety.
+- Task completed: T1.7 Implement hard delete + deletion event.
+- Added `app/hard_delete.py` with admin-only hard delete orchestration for:
+  - attachment file cleanup,
+  - export artifact cleanup,
+  - DB cleanup (messages, receipts, metadata, read states, conversation events, conversation row),
+  - minimal deletion event creation.
+- Added `conversation_deletion_events` model + migration:
+  - `app/db/models.py`
+  - `alembic/versions/20260206_02_add_conversation_deletion_events_table.py`
+- Added CRUD helpers for deletion events in `app/db/crud.py`.
+- Added admin endpoint `POST /conversations/{conversation_id}/hard-delete` in `app/api/conversations.py`.
+- Added integration coverage in `tests/test_hard_delete.py`.
 
 ## Execution anchor
 - Branch: `impl/whatsapp-frontdesk-extensions`.
-- Current task in `TASKS.md`: T1.7.
-- Progress: 7/13.
+- Current task in `TASKS.md`: T2.1.
+- Progress: 8/13.
 
 ## Verification performed
-- `.venv/bin/python -m unittest -v tests/test_export_cleanup.py`
+- `.venv/bin/python -m unittest -v tests/test_hard_delete.py`
 - `.venv/bin/python -m unittest -v tests/test_export_pipeline.py`
+- `.venv/bin/python -m unittest -v tests/test_export_cleanup.py`
+- `.venv/bin/python -m unittest -v tests/test_attachment_pipeline.py`
 
 ## Resume next
-- Implement T1.7 hard delete + deletion event.
-- Reuse cleanup/export safety constraints for file removal operations in hard-delete flow.
+- Implement T2.1 reverse-proxy download/view authorization with `X-Accel-Redirect`.
+- Add backend authorize endpoints for attachment/export downloads and document proxy config requirements.
 - Keep known DB caveat in mind: full `alembic upgrade head` is still blocked by prior SQLite-incompatible migration `20260202_03`.

@@ -181,7 +181,7 @@
 
 ## Execution status
 - Status: IN_PROGRESS
-- Current task: T1.7
-- Completed tasks: T0.1, T1.1, T1.2, T1.3, T1.4, T1.5, T1.6
-- Progress: 7/13
+- Current task: T2.1
+- Completed tasks: T0.1, T1.1, T1.2, T1.3, T1.4, T1.5, T1.6, T1.7
+- Progress: 8/13
 - Last updated: 2026-02-06
