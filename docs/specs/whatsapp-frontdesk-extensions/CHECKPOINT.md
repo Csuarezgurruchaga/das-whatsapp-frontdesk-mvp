@@ -3,33 +3,33 @@
 Last updated: 2026-02-06
 
 ## Completed
-- T2.2 Implement frontend attachments UI (composer + history + view/download).
-- Added paperclip entrypoint and hidden file input in `app/static/index.html`.
-- Implemented attachment upload flow in `app/static/app.js`:
-  - pre-upload validation (MIME allowlist + per-type size caps),
-  - optimistic `uploading` message,
-  - final `sent/failed` refresh from backend.
-- Added attachment bubble rendering and actions in `app/static/app.js`:
-  - icon + filename + size + status,
-  - `Ver` for PDF/PNG/JPG/JPEG/TXT,
-  - `Descargar` for all attachment types.
-- Added preview modal and attachment styling in `app/static/styles.css`.
-- Fixed modal hidden-state override and wired missing attachment/modal listeners after interrupted session.
+- T2.3 Implement tipification UI (tags) + taxonomy admin UI.
+- Added taxonomy/tag persistence and APIs:
+  - new `taxonomy_tags` + `conversation_tags` models/migration,
+  - conversation tag assignment endpoint (`PUT /conversations/{id}/tags`),
+  - taxonomy admin endpoints (list/create/update with role gating).
+- Added `supervisor` role support for taxonomy read-only behavior.
+- Extended conversation detail payload with `tags` + `available_tags`.
+- Implemented frontend tipification and taxonomy admin UX:
+  - detail-panel tag selector for operator/admin,
+  - taxonomy modal with admin create/rename/archive,
+  - supervisor read-only taxonomy list UI.
+- Added regression coverage in `tests/test_taxonomy_and_tags.py`.
 
 ## Current / Next
-- Next task: T2.3 Implement tipification UI (tags) + taxonomy admin UI.
+- Next task: T3.1 Add logs/metrics and operator-facing errors.
 - Status: READY
 
 ## Important constraints
-- Backend must authorize with normal session, then delegate file serving via proxy (no app streaming).
-- Keep current role model (`agent`, `admin`) unchanged until role-expansion tasks.
+- Keep Extras strictly behind existing role/permission checks.
+- Preserve non-streaming proxy download behavior implemented in T2.1.
 
 ## Gotchas / Risks discovered
-- Browser-level validation for T2.2 requires seeded conversations and authenticated UI session in staging/local.
+- Full browser validation for T2.3 still requires authenticated seeded users (`admin`, `agent`, `supervisor`).
 - Existing SQLite migration caveat remains for full `alembic upgrade head` (`20260202_03` incompatibility).
 
 ## Safe resume instructions
 - Checkout branch `impl/whatsapp-frontdesk-extensions`.
-- Start from `TASKS.md` current task `T2.3`.
+- Start from `TASKS.md` current task `T3.1`.
 - Verify backend baseline with `.venv/bin/python -m unittest discover -s tests -v`.
 - Verify frontend script syntax with `node --check app/static/app.js`.

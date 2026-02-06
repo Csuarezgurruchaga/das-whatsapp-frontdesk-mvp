@@ -83,3 +83,10 @@
 - solution: Completed the attachments UI flow end-to-end (paperclip trigger, upload request, optimistic `uploading`, final `sent/failed`, history bubble rendering, view/download actions), fixed modal hidden-state override (`.attachment-modal.hidden`), and updated spec execution status/checkpoint to move next to `T2.3`.
 - notes: Browser smoke for T2.2 still requires seeded/authenticated runtime environment; backend regression suite remained green.
 - proof: `node --check app/static/app.js && .venv/bin/python -m unittest discover -s tests -v`
+
+- date: 2026-02-06
+- context: `app/{api/conversations.py,api/deps.py,db/models.py,db/crud.py,static/{index.html,app.js,styles.css}}`, `alembic/versions/20260206_03_add_taxonomy_and_conversation_tags.py`, `tests/test_taxonomy_and_tags.py` (Task `T2.3`)
+- problem: Extras required conversation tipification and taxonomy admin UX with role gating (`admin` edit, `supervisor` read-only), but the codebase had no tag/taxonomy persistence, no APIs, and no frontend controls for tagging/taxonomy management.
+- solution: Added taxonomy/tag schema + CRUD + API endpoints (list/create/update taxonomy and set conversation tags), extended conversation detail payload with assigned/available tags, introduced supervisor-aware role behavior for taxonomy paths, implemented detail-panel tag selection and taxonomy modal UI, and added deterministic endpoint-level tests.
+- notes: Browser-level validation still requires authenticated seeded roles in a real runtime environment; backend regression suite remains green in unit-test mode.
+- proof: `.venv/bin/python -m unittest -v tests/test_taxonomy_and_tags.py && .venv/bin/python -m unittest discover -s tests -v && node --check app/static/app.js`
