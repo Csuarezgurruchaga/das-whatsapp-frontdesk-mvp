@@ -2,28 +2,22 @@
 
 Last updated: 2026-02-06
 
-## Completed
-- T0.1 Align configs, roles, and feature flags.
-- T1.1 Implement attachment metadata model.
-- T1.2 Implement `safe(truncate(filename))` + MIME validation.
-- T1.3 Implement attachment binary storage on NAS.
-- T1.4 Implement attachment upload + send pipeline (WhatsApp native media).
+## Completed in latest chunk
+- Task completed: T1.5 Implement export ZIP generation (on-demand).
+- Added `app/export_pipeline.py` to generate per-conversation ZIP exports under `EXPORTS_DIR`.
+- Export ZIP now includes `transcript.json` + available attachment binaries; missing binaries are recorded as warnings in transcript metadata.
+- Added coverage in `tests/test_export_pipeline.py` for happy path, missing attachment binary, and unknown conversation.
 
-## Current / Next
-- Next task: T1.5 Implement export ZIP generation (on-demand).
-- Status: READY.
+## Execution anchor
+- Branch: `impl/whatsapp-frontdesk-extensions`.
+- Current task in `TASKS.md`: T1.6.
+- Progress: 6/13.
 
-## Important constraints
-- Keep storage path format `ATTACHMENTS_DIR/<conversation_id>/<attachment_id>_<safe_filename>`.
-- Keep upload validation strictly aligned to `app/attachments.py` (allowlist + extension fallback + per-type caps).
-- Attachments are immutable and retry/idempotency is keyed by `attachment_id` (dedupe existing `SENT`; retry `FAILED`).
+## Verification performed
+- `.venv/bin/python -m unittest -v tests/test_export_pipeline.py`
+- `.venv/bin/python -m unittest -v tests/test_attachment_pipeline.py tests/test_attachment_storage.py tests/test_attachment_validation.py`
 
-## Gotchas / Risks discovered
-- Full `alembic upgrade head` still fails on SQLite because prior migration `20260202_03` uses unsupported `ALTER COLUMN ... DROP NOT NULL`.
-- SQLite tests still require explicit IDs for `BigInteger` PK entities (patched in tests for message/attachment/receipt/event).
-- New multipart upload endpoint requires `python-multipart` in `.venv`.
-
-## Safe resume instructions
-- Continue from branch `impl/whatsapp-frontdesk-extensions`.
-- Start T1.5 from current backend artifacts: `app/attachment_pipeline.py`, `app/attachment_storage.py`, and `attachment_metadata.storage_relpath`.
-- Re-run: `.venv/bin/python -m unittest -v tests/test_attachment_pipeline.py tests/test_attachment_storage.py tests/test_attachment_validation.py`.
+## Resume next
+- Implement T1.6 exports TTL cleanup using `EXPORTS_DIR` and `EXPORTS_TTL_DAYS`.
+- Preserve export layout introduced in T1.5: `<conversation_id>/conversation-<conversation_id>-<export_id>.zip`.
+- Keep known DB caveat in mind: full `alembic upgrade head` is still blocked by prior SQLite-incompatible migration `20260202_03`.
