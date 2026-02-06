@@ -48,3 +48,17 @@
 - solution: Added `AttachmentMetadata` model and `AttachmentStatus` enum, created Alembic migration with required FKs/constraints/indexes, and implemented CRUD helpers including idempotent `get_or_create_attachment_metadata`.
 - notes: Full `alembic upgrade head` against SQLite fails due pre-existing revision `20260202_03` using unsupported `ALTER COLUMN ... DROP NOT NULL`; validated T1.1 behavior with isolated SQLAlchemy roundtrip instead.
 - proof: `.venv/bin/python - <<'PY' ... T1.1 CRUD roundtrip OK ... PY`
+
+- date: 2026-02-06
+- context: `git` operaciones remotas (fetch/pull/push) en este entorno
+- problem: La comunicación remota por SSH hacia GitHub está bloqueada y además se pidió explícitamente evitar SSH para `git`.
+- solution: Establecer como regla de trabajo usar siempre HTTP/HTTPS para `git` con red (sin SSH), incluyendo push del branch activo por URL `https://github.com/...`.
+- notes: Mantener `GIT_CONFIG_GLOBAL=/dev/null` cuando sea necesario para evitar rewrite global `https -> ssh`; usar `GIT_ASKPASS` + token para autenticación no interactiva.
+- proof: `git push https://github.com/Csuarezgurruchaga/das-whatsapp-frontdesk-mvp.git impl/whatsapp-frontdesk-extensions`
+
+- date: 2026-02-06
+- context: `app/export_cleanup.py`, `tests/test_export_cleanup.py`, `docs/specs/whatsapp-frontdesk-extensions/{TASKS.md,CHECKPOINT.md}` (Task `T1.6`)
+- problem: Extras required deterministic export retention cleanup by `EXPORTS_TTL_DAYS` with low risk of deleting unrelated files and with a safe staging validation mode.
+- solution: Added TTL cleanup module that uses ZIP mtime as timestamp source, deletes only files that match the export naming convention, removes empty per-conversation export directories, and provides dry-run execution via `python -m app.export_cleanup --dry-run`.
+- notes: Cleanup intentionally skips non-export ZIP files to reduce accidental deletions from `EXPORTS_DIR`.
+- proof: `.venv/bin/python -m unittest -v tests/test_export_cleanup.py`
