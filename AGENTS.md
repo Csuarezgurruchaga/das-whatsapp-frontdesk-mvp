@@ -69,3 +69,10 @@
 - solution: Implemented `hard_delete_conversation` service + admin API endpoint, added DB cleanup ordering for dependent tables, file cleanup for attachments/exports, and introduced `conversation_deletion_events` (no FK to conversations) to persist `conversation_id`, actor, timestamp, and optional reason after hard delete.
 - notes: Added SQLite-only ID fallback in `create_conversation_deletion_event` to keep deterministic tests working with the existing BigInteger PK pattern.
 - proof: `.venv/bin/python -m unittest -v tests/test_hard_delete.py`
+
+- date: 2026-02-06
+- context: `app/api/conversations.py`, `docs/specs/whatsapp-frontdesk-extensions/PROXY.md`, `tests/test_proxy_download_authorization.py` (Task `T2.1`)
+- problem: Extras required backend-authorized attachment/export downloads via reverse-proxy (`X-Accel-Redirect`) without backend streaming, but there were no authorization endpoints nor proxy contract docs.
+- solution: Added attachment download/view + export download authorization endpoints that validate session/permissions and emit `X-Accel-Redirect` with safe relpaths and content headers; documented Nginx mapping requirements; added endpoint-level tests for success and authorization failures.
+- notes: Test coverage was implemented as direct endpoint function tests because `httpx` is not installed in this environment (`fastapi.testclient` unavailable).
+- proof: `.venv/bin/python -m unittest discover -s tests -v`

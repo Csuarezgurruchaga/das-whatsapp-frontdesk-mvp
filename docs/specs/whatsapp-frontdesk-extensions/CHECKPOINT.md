@@ -2,32 +2,27 @@
 
 Last updated: 2026-02-06
 
-## Completed in latest chunk
-- Task completed: T1.7 Implement hard delete + deletion event.
-- Added `app/hard_delete.py` with admin-only hard delete orchestration for:
-  - attachment file cleanup,
-  - export artifact cleanup,
-  - DB cleanup (messages, receipts, metadata, read states, conversation events, conversation row),
-  - minimal deletion event creation.
-- Added `conversation_deletion_events` model + migration:
-  - `app/db/models.py`
-  - `alembic/versions/20260206_02_add_conversation_deletion_events_table.py`
-- Added CRUD helpers for deletion events in `app/db/crud.py`.
-- Added admin endpoint `POST /conversations/{conversation_id}/hard-delete` in `app/api/conversations.py`.
-- Added integration coverage in `tests/test_hard_delete.py`.
+## Completed
+- T2.1 Implement reverse-proxy download/view authorization with `X-Accel-Redirect`.
+- Added backend authorization endpoints in `app/api/conversations.py`:
+  - attachment download/view by `attachment_id`
+  - export download by `export_id`
+- Added proxy deployment notes in `docs/specs/whatsapp-frontdesk-extensions/PROXY.md`.
+- Added test coverage in `tests/test_proxy_download_authorization.py`.
 
-## Execution anchor
-- Branch: `impl/whatsapp-frontdesk-extensions`.
-- Current task in `TASKS.md`: T2.1.
-- Progress: 8/13.
+## Current / Next
+- Next task: T2.2 Implement frontend attachments UI (composer + history + view/download).
+- Status: READY
 
-## Verification performed
-- `.venv/bin/python -m unittest -v tests/test_hard_delete.py`
-- `.venv/bin/python -m unittest -v tests/test_export_pipeline.py`
-- `.venv/bin/python -m unittest -v tests/test_export_cleanup.py`
-- `.venv/bin/python -m unittest -v tests/test_attachment_pipeline.py`
+## Important constraints
+- Backend must authorize with normal session, then delegate file serving via proxy (no app streaming).
+- Keep current role model (`agent`, `admin`) unchanged until role-expansion tasks.
 
-## Resume next
-- Implement T2.1 reverse-proxy download/view authorization with `X-Accel-Redirect`.
-- Add backend authorize endpoints for attachment/export downloads and document proxy config requirements.
-- Keep known DB caveat in mind: full `alembic upgrade head` is still blocked by prior SQLite-incompatible migration `20260202_03`.
+## Gotchas / Risks discovered
+- This environment lacks `httpx`, so API-route checks were verified through direct endpoint function tests.
+- Existing SQLite migration caveat remains for full `alembic upgrade head` (`20260202_03` incompatibility).
+
+## Safe resume instructions
+- Checkout branch `impl/whatsapp-frontdesk-extensions`.
+- Start from `TASKS.md` current task `T2.2`.
+- Verify baseline with `.venv/bin/python -m unittest discover -s tests -v`.
