@@ -90,3 +90,10 @@
 - solution: Added taxonomy/tag schema + CRUD + API endpoints (list/create/update taxonomy and set conversation tags), extended conversation detail payload with assigned/available tags, introduced supervisor-aware role behavior for taxonomy paths, implemented detail-panel tag selection and taxonomy modal UI, and added deterministic endpoint-level tests.
 - notes: Browser-level validation still requires authenticated seeded roles in a real runtime environment; backend regression suite remains green in unit-test mode.
 - proof: `.venv/bin/python -m unittest -v tests/test_taxonomy_and_tags.py && .venv/bin/python -m unittest discover -s tests -v && node --check app/static/app.js`
+
+- date: 2026-02-06
+- context: `git` remoto (fetch/pull/push) para este repo en este entorno
+- problem: Debe evitarse SSH y estandarizar credenciales no interactivas para futuras sesiones.
+- solution: Regla operativa confirmada: usar siempre URL `https://github.com/...` para git con red y autenticación por `GIT_ASKPASS` con token desde variable de entorno `GITHUB_PRIVATE_ACCESS_TOKEN` (no usar `GITHUB_PERSONAL_ACCESS_TOKEN` para este flujo).
+- notes: Mantener `GIT_CONFIG_GLOBAL=/dev/null` para evitar rewrite global `https -> ssh`.
+- proof: `GIT_CONFIG_GLOBAL=/dev/null GIT_ASKPASS=/tmp/git-askpass.sh GITHUB_TOKEN=$GITHUB_PRIVATE_ACCESS_TOKEN git push https://github.com/Csuarezgurruchaga/das-whatsapp-frontdesk-mvp.git impl/whatsapp-frontdesk-extensions`
