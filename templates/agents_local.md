@@ -56,7 +56,7 @@ Example:
 
 ## 2) Incidents & Fixes
 
-**Format**: `YYYY-MM-DD — <title> [F-###]`
+**Format**: `YYYY-MM-DD — <title> [F-###] [AGENT?]`
 - Area: <file/component>
 - Symptom: <what happened>
 - Root cause: <why> (or `unknown`)
@@ -134,6 +134,7 @@ Log when:
 - Command used 3+ times -> [C-###]
 - Error took >30min to debug -> [F-###] or [P-###]
 - Dependency added/removed -> [D-###]
+- Agent made a wrong assumption / broke something / had to backtrack -> [F-###] [AGENT]
 
 **IDs**: D-001, F-001, C-001, P-001, T-001 (increment per section)
 
