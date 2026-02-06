@@ -104,3 +104,10 @@
 - solution: Added attachment send success/failure counters and structured logs, added proxy auth-denial + missing-file logs in download authorization endpoints, and surfaced backend send-failure details in composer UI for text/attachment sends.
 - notes: Metrics are in-process counters intended for task-level instrumentation; they reset on process restart and are validated in unit tests.
 - proof: `.venv/bin/python -m unittest -v tests/test_attachment_pipeline.py tests/test_proxy_download_authorization.py && node --check app/static/app.js && .venv/bin/python -m unittest discover -s tests -v`
+
+- date: 2026-02-06
+- context: `docs/specs/whatsapp-frontdesk-extensions/{DEPLOYMENT.md,TASKS.md,CHECKPOINT.md}` (Task `T4.1`)
+- problem: Release phase lacked an Extras-specific execution artifact for staged acceptance, rollback, and role-oriented operational guidance; final sign-off requirements were not anchored in a reusable checklist.
+- solution: Added `DEPLOYMENT.md` with A0-A7 acceptance template, rollout checklist, rollback steps, and operator/admin short guide; updated execution status/checkpoint to reflect T4.1 is in progress pending staging/on-prem run and stakeholder approval.
+- notes: Deterministic local checks remain available, but final task completion still requires integrated environment (NAS + proxy + SSO + seeded roles + WhatsApp credentials).
+- proof: `.venv/bin/python -m unittest discover -s tests -v && node --check app/static/app.js`
