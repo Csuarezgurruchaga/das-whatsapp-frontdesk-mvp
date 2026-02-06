@@ -10,6 +10,8 @@ const state = {
   activeMessages: [],
   pendingAttachmentMessages: [],
   agentOptions: [],
+  taxonomyTags: [],
+  taxonomyEnabled: false,
   ws: null,
 };
 
@@ -74,6 +76,13 @@ const els = {
   mainView: document.getElementById("main-view"),
   loginForm: document.getElementById("login-form"),
   loginError: document.getElementById("login-error"),
+  taxonomyBtn: document.getElementById("taxonomy-btn"),
+  taxonomyModal: document.getElementById("taxonomy-modal"),
+  taxonomyModalClose: document.getElementById("taxonomy-modal-close"),
+  taxonomyError: document.getElementById("taxonomy-error"),
+  taxonomyList: document.getElementById("taxonomy-list"),
+  taxonomyCreateForm: document.getElementById("taxonomy-create-form"),
+  taxonomyCreateInput: document.getElementById("taxonomy-create-input"),
   logoutBtn: document.getElementById("logout-btn"),
   userChip: document.getElementById("user-chip"),
   tabs: document.querySelectorAll(".tab"),
@@ -170,6 +179,9 @@ async function handleLogout() {
   state.activeConversation = null;
   state.activeMessages = [];
   state.pendingAttachmentMessages = [];
+  state.taxonomyTags = [];
+  state.taxonomyEnabled = false;
+  closeTaxonomyModal();
   closeAttachmentPreview();
   disconnectWs();
   setView("login");
@@ -181,12 +193,17 @@ function initAfterLogin() {
   state.activeConversation = null;
   state.activeMessages = [];
   state.pendingAttachmentMessages = [];
+  state.taxonomyTags = [];
+  state.taxonomyEnabled = false;
   renderTabs();
   loadConversations();
   connectWs();
   if (state.currentUser.role === "admin") {
     loadAgents();
+  } else {
+    state.agentOptions = [];
   }
+  loadTaxonomyState();
 }
 
 function renderTabs() {
@@ -416,6 +433,7 @@ function renderDetails() {
   wrapper.appendChild(detailRow("Estado", labelForState(detail.state)));
   wrapper.appendChild(detailRow("Asignado", detail.assigned_to_username || "Sin asignar"));
   wrapper.appendChild(detailRow("Ultima actividad", formatDateTime(detail.last_activity_at)));
+  wrapper.appendChild(buildConversationTagsCard(detail));
 
   const actions = document.createElement("div");
   actions.className = "detail-actions";
@@ -478,6 +496,102 @@ function renderDetails() {
 
   els.detailBody.innerHTML = "";
   els.detailBody.appendChild(wrapper);
+}
+
+function canManageTaxonomy() {
+  const role = state.currentUser?.role;
+  return role === "admin" || role === "supervisor";
+}
+
+function canEditTaxonomy() {
+  return state.currentUser?.role === "admin";
+}
+
+function buildConversationTagsCard(detail) {
+  const card = document.createElement("div");
+  card.className = "detail-card";
+
+  const heading = document.createElement("strong");
+  heading.textContent = "Etiquetas";
+  card.appendChild(heading);
+
+  const assignedTags = Array.isArray(detail.tags) ? detail.tags : [];
+  const activeAssignedTags = assignedTags.filter((tag) => !tag.is_archived);
+  const archivedAssignedTags = assignedTags.filter((tag) => tag.is_archived);
+
+  if (assignedTags.length === 0) {
+    const empty = document.createElement("p");
+    empty.className = "muted";
+    empty.textContent = "Sin etiquetas.";
+    card.appendChild(empty);
+  } else {
+    const pills = document.createElement("div");
+    pills.className = "tag-pills";
+    assignedTags.forEach((tag) => {
+      const pill = document.createElement("span");
+      pill.className = `tag-pill${tag.is_archived ? " archived" : ""}`;
+      pill.textContent = tag.name;
+      pills.appendChild(pill);
+    });
+    card.appendChild(pills);
+  }
+
+  const canEditConversationTags =
+    state.currentUser &&
+    (state.currentUser.role === "agent" || state.currentUser.role === "admin") &&
+    state.taxonomyEnabled;
+  if (!canEditConversationTags) {
+    return card;
+  }
+
+  const options = Array.isArray(detail.available_tags)
+    ? detail.available_tags.filter((tag) => !tag.is_archived)
+    : [];
+  if (options.length === 0) {
+    const note = document.createElement("p");
+    note.className = "muted";
+    note.textContent = "No hay etiquetas disponibles.";
+    card.appendChild(note);
+    return card;
+  }
+
+  const selector = document.createElement("div");
+  selector.className = "tag-selector";
+
+  const selectedTagIds = new Set(activeAssignedTags.map((tag) => Number(tag.tag_id)));
+  options.forEach((tag) => {
+    const label = document.createElement("label");
+    const checkbox = document.createElement("input");
+    checkbox.type = "checkbox";
+    checkbox.value = String(tag.tag_id);
+    checkbox.checked = selectedTagIds.has(Number(tag.tag_id));
+    label.appendChild(checkbox);
+    label.append(` ${tag.name}`);
+    selector.appendChild(label);
+  });
+
+  const applyBtn = document.createElement("button");
+  applyBtn.type = "button";
+  applyBtn.className = "ghost";
+  applyBtn.textContent = "Guardar etiquetas";
+  applyBtn.addEventListener("click", async () => {
+    const selected = Array.from(selector.querySelectorAll('input[type="checkbox"]:checked')).map(
+      (node) => Number(node.value)
+    );
+    await setConversationTags(detail.conversation_id, selected);
+  });
+
+  card.appendChild(selector);
+  card.appendChild(applyBtn);
+
+  if (archivedAssignedTags.length > 0) {
+    const archived = document.createElement("p");
+    archived.className = "muted";
+    archived.textContent = `Archivadas: ${archivedAssignedTags.map((tag) => tag.name).join(", ")}`;
+    card.appendChild(archived);
+  }
+
+  return card;
 }
 
 function detailRow(label, value) {
@@ -645,6 +759,180 @@ async function loadAgents() {
   } catch (err) {
     state.agentOptions = [];
   }
+}
+
+async function loadTaxonomyState() {
+  state.taxonomyEnabled = false;
+  state.taxonomyTags = [];
+  if (!canManageTaxonomy()) {
+    els.taxonomyBtn.classList.add("hidden");
+    return;
+  }
+  try {
+    const tags = await apiFetch("/conversations/taxonomy/tags?include_archived=true");
+    state.taxonomyTags = Array.isArray(tags) ? tags : [];
+    state.taxonomyEnabled = true;
+    els.taxonomyBtn.classList.remove("hidden");
+  } catch (err) {
+    els.taxonomyBtn.classList.add("hidden");
+  }
+}
+
+async function refreshTaxonomyTags() {
+  if (!canManageTaxonomy()) {
+    return;
+  }
+  try {
+    const tags = await apiFetch("/conversations/taxonomy/tags?include_archived=true");
+    state.taxonomyTags = Array.isArray(tags) ? tags : [];
+    state.taxonomyEnabled = true;
+  } catch (err) {
+    state.taxonomyTags = [];
+    state.taxonomyEnabled = false;
+    throw err;
+  }
+}
+
+async function setConversationTags(conversationId, tagIds) {
+  els.composerError.textContent = "";
+  try {
+    await apiFetch(`/conversations/${conversationId}/tags`, {
+      method: "PUT",
+      body: JSON.stringify({ tag_ids: tagIds }),
+    });
+    await selectConversation(conversationId);
+  } catch (err) {
+    els.composerError.textContent =
+      err instanceof Error && err.message ? err.message : "No se pudieron guardar las etiquetas.";
+  }
+}
+
+function renderTaxonomyModal() {
+  const canEdit = canEditTaxonomy();
+  els.taxonomyCreateForm.classList.toggle("hidden", !canEdit);
+  els.taxonomyList.innerHTML = "";
+
+  if (!state.taxonomyEnabled) {
+    const unavailable = document.createElement("p");
+    unavailable.className = "muted";
+    unavailable.textContent = "Taxonomia no disponible.";
+    els.taxonomyList.appendChild(unavailable);
+    return;
+  }
+
+  if (state.taxonomyTags.length === 0) {
+    const empty = document.createElement("p");
+    empty.className = "muted";
+    empty.textContent = "No hay etiquetas definidas.";
+    els.taxonomyList.appendChild(empty);
+    return;
+  }
+
+  state.taxonomyTags.forEach((tag) => {
+    const row = document.createElement("div");
+    row.className = "taxonomy-row";
+
+    const name = document.createElement("span");
+    name.className = `tag-pill${tag.is_archived ? " archived" : ""}`;
+    name.textContent = tag.name;
+    row.appendChild(name);
+
+    if (canEdit) {
+      const renameInput = document.createElement("input");
+      renameInput.type = "text";
+      renameInput.value = tag.name;
+      renameInput.maxLength = 64;
+      renameInput.className = "taxonomy-input";
+      row.appendChild(renameInput);
+
+      const renameBtn = document.createElement("button");
+      renameBtn.type = "button";
+      renameBtn.className = "ghost";
+      renameBtn.textContent = "Renombrar";
+      renameBtn.addEventListener("click", async () => {
+        await updateTaxonomyTag(tag.tag_id, { name: renameInput.value });
+      });
+      row.appendChild(renameBtn);
+
+      const archiveBtn = document.createElement("button");
+      archiveBtn.type = "button";
+      archiveBtn.className = "ghost";
+      archiveBtn.textContent = tag.is_archived ? "Activar" : "Archivar";
+      archiveBtn.addEventListener("click", async () => {
+        await updateTaxonomyTag(tag.tag_id, { is_archived: !tag.is_archived });
+      });
+      row.appendChild(archiveBtn);
+    }
+
+    els.taxonomyList.appendChild(row);
+  });
+}
+
+async function updateTaxonomyTag(tagId, payload) {
+  els.taxonomyError.textContent = "";
+  try {
+    await apiFetch(`/conversations/taxonomy/tags/${tagId}`, {
+      method: "PATCH",
+      body: JSON.stringify(payload),
+    });
+    await refreshTaxonomyTags();
+    renderTaxonomyModal();
+    if (state.activeConversation) {
+      await selectConversation(state.activeConversation.conversation_id);
+    }
+  } catch (err) {
+    els.taxonomyError.textContent =
+      err instanceof Error && err.message ? err.message : "No se pudo actualizar la etiqueta.";
+  }
+}
+
+async function createTaxonomyTag(event) {
+  event.preventDefault();
+  if (!canEditTaxonomy()) {
+    return;
+  }
+  els.taxonomyError.textContent = "";
+  const name = String(els.taxonomyCreateInput.value || "").trim();
+  if (!name) {
+    els.taxonomyError.textContent = "Ingresa un nombre para la etiqueta.";
+    return;
+  }
+  try {
+    await apiFetch("/conversations/taxonomy/tags", {
+      method: "POST",
+      body: JSON.stringify({ name }),
+    });
+    els.taxonomyCreateInput.value = "";
+    await refreshTaxonomyTags();
+    renderTaxonomyModal();
+    if (state.activeConversation) {
+      await selectConversation(state.activeConversation.conversation_id);
+    }
+  } catch (err) {
+    els.taxonomyError.textContent =
+      err instanceof Error && err.message ? err.message : "No se pudo crear la etiqueta.";
+  }
+}
+
+async function openTaxonomyModal() {
+  els.taxonomyError.textContent = "";
+  try {
+    await refreshTaxonomyTags();
+    renderTaxonomyModal();
+    els.taxonomyModal.classList.remove("hidden");
+  } catch (err) {
+    els.taxonomyError.textContent =
+      err instanceof Error && err.message ? err.message : "Taxonomia no disponible.";
+    renderTaxonomyModal();
+    els.taxonomyModal.classList.remove("hidden");
+  }
+}
+
+function closeTaxonomyModal() {
+  if (els.taxonomyModal.classList.contains("hidden")) {
+    return;
+  }
+  els.taxonomyModal.classList.add("hidden");
 }
 
 function connectWs() {
@@ -916,6 +1204,20 @@ els.loginForm.addEventListener("submit", handleLogin);
 
 els.logoutBtn.addEventListener("click", handleLogout);
 
+els.taxonomyBtn.addEventListener("click", () => {
+  openTaxonomyModal();
+});
+
+els.taxonomyCreateForm.addEventListener("submit", createTaxonomyTag);
+
+els.taxonomyModalClose.addEventListener("click", closeTaxonomyModal);
+
+els.taxonomyModal.addEventListener("click", (event) => {
+  if (event.target === els.taxonomyModal) {
+    closeTaxonomyModal();
+  }
+});
+
 els.tabs.forEach((tab) => {
   tab.addEventListener("click", () => {
     state.activeTab = tab.dataset.state;
@@ -965,6 +1267,10 @@ els.attachmentModal.addEventListener("click", (event) => {
 document.addEventListener("keydown", (event) => {
   if (event.key === "Escape" && !els.attachmentModal.classList.contains("hidden")) {
     closeAttachmentPreview();
+    return;
+  }
+  if (event.key === "Escape" && !els.taxonomyModal.classList.contains("hidden")) {
+    closeTaxonomyModal();
   }
 });
 

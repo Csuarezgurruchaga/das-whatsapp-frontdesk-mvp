@@ -2,7 +2,7 @@ from __future__ import annotations
 
 from datetime import datetime, timezone
 
-from sqlalchemy import func, select, update
+from sqlalchemy import delete, func, select, update
 from sqlalchemy.orm import Session
 
 from .models import (
@@ -11,6 +11,7 @@ from .models import (
     Contact,
     Conversation,
     ConversationDeletionEvent,
+    ConversationTag,
     ConversationReadState,
     ConversationState,
     ConversationEvent,
@@ -20,7 +21,9 @@ from .models import (
     MessageReceipt,
     MessageReceiptStatus,
     SenderType,
+    TaxonomyTag,
     User,
+    UserRole,
     UserSession,
 )
 
@@ -507,6 +510,132 @@ def get_or_create_attachment_metadata(
         status=status,
         created_by=created_by,
     )
+
+
+def list_taxonomy_tags(
+    session: Session,
+    *,
+    include_archived: bool = True,
+) -> list[TaxonomyTag]:
+    stmt = select(TaxonomyTag).order_by(TaxonomyTag.name.asc())
+    if not include_archived:
+        stmt = stmt.where(TaxonomyTag.is_archived.is_(False))
+    return list(session.scalars(stmt))
+
+
+def list_taxonomy_tags_by_ids(
+    session: Session,
+    *,
+    tag_ids: list[int],
+) -> list[TaxonomyTag]:
+    if not tag_ids:
+        return []
+    stmt = (
+        select(TaxonomyTag)
+        .where(TaxonomyTag.id.in_(tag_ids))
+        .order_by(TaxonomyTag.name.asc())
+    )
+    return list(session.scalars(stmt))
+
+
+def get_taxonomy_tag(
+    session: Session,
+    *,
+    tag_id: int,
+) -> TaxonomyTag | None:
+    return session.get(TaxonomyTag, tag_id)
+
+
+def get_taxonomy_tag_by_name(
+    session: Session,
+    *,
+    name: str,
+) -> TaxonomyTag | None:
+    normalized = name.strip().lower()
+    if not normalized:
+        return None
+    stmt = (
+        select(TaxonomyTag)
+        .where(func.lower(TaxonomyTag.name) == normalized)
+        .limit(1)
+    )
+    return session.scalar(stmt)
+
+
+def create_taxonomy_tag(
+    session: Session,
+    *,
+    name: str,
+    created_by: int,
+) -> TaxonomyTag:
+    bind = session.get_bind()
+    if bind.dialect.name == "sqlite":
+        next_id_stmt = select(func.coalesce(func.max(TaxonomyTag.id), 0))
+        next_id = int(session.scalar(next_id_stmt) or 0) + 1
+    else:
+        next_id = None
+    tag = TaxonomyTag(
+        id=next_id,
+        name=name,
+        is_archived=False,
+        created_by=created_by,
+    )
+    session.add(tag)
+    return tag
+
+
+def update_taxonomy_tag(
+    tag: TaxonomyTag,
+    *,
+    name: str | None = None,
+    is_archived: bool | None = None,
+    now: datetime | None = None,
+) -> TaxonomyTag:
+    if name is not None:
+        tag.name = name
+    if is_archived is not None:
+        tag.is_archived = is_archived
+    tag.updated_at = now or datetime.now(timezone.utc)
+    return tag
+
+
+def list_conversation_tags(
+    session: Session,
+    *,
+    conversation_id: int,
+) -> list[TaxonomyTag]:
+    stmt = (
+        select(TaxonomyTag)
+        .join(ConversationTag, ConversationTag.tag_id == TaxonomyTag.id)
+        .where(ConversationTag.conversation_id == conversation_id)
+        .order_by(TaxonomyTag.name.asc())
+    )
+    return list(session.scalars(stmt))
+
+
+def set_conversation_tags(
+    session: Session,
+    *,
+    conversation_id: int,
+    tag_ids: list[int],
+    assigned_by: int,
+    assigned_at: datetime | None = None,
+) -> list[TaxonomyTag]:
+    deduped_tag_ids = list(dict.fromkeys(tag_ids))
+    session.execute(
+        delete(ConversationTag).where(ConversationTag.conversation_id == conversation_id)
+    )
+    when = assigned_at or datetime.now(timezone.utc)
+    for tag_id in deduped_tag_ids:
+        session.add(
+            ConversationTag(
+                conversation_id=conversation_id,
+                tag_id=tag_id,
+                assigned_by=assigned_by,
+                assigned_at=when,
+            )
+        )
+    return list_conversation_tags(session, conversation_id=conversation_id)
 
 
 def get_user_by_username(session: Session, *, username: str) -> User | None:

@@ -2,6 +2,7 @@ import enum
 
 from sqlalchemy import (
     BigInteger,
+    Boolean,
     CheckConstraint,
     DateTime,
     Enum,
@@ -20,6 +21,7 @@ from .base import Base
 class UserRole(enum.Enum):
     AGENT = "agent"
     ADMIN = "admin"
+    SUPERVISOR = "supervisor"
 
 
 class ConversationState(enum.Enum):
@@ -245,6 +247,52 @@ class ConversationDeletionEvent(Base):
     )
 
     actor_user = relationship("User")
+
+
+class TaxonomyTag(Base):
+    __tablename__ = "taxonomy_tags"
+    __table_args__ = (
+        UniqueConstraint("name", name="uq_taxonomy_tags_name"),
+        Index("ix_taxonomy_tags_is_archived", "is_archived"),
+    )
+
+    id: Mapped[int] = mapped_column(BigInteger, primary_key=True)
+    name: Mapped[str] = mapped_column(String(120), nullable=False)
+    is_archived: Mapped[bool] = mapped_column(
+        Boolean,
+        nullable=False,
+        default=False,
+    )
+    created_by: Mapped[int] = mapped_column(ForeignKey("users.id"), nullable=False)
+    created_at: Mapped[object] = mapped_column(
+        DateTime(timezone=True), server_default=func.now(), nullable=False
+    )
+    updated_at: Mapped[object] = mapped_column(
+        DateTime(timezone=True), server_default=func.now(), nullable=False
+    )
+
+    created_by_user = relationship("User")
+
+
+class ConversationTag(Base):
+    __tablename__ = "conversation_tags"
+    __table_args__ = (
+        Index("ix_conversation_tags_conversation_id", "conversation_id"),
+        Index("ix_conversation_tags_tag_id", "tag_id"),
+    )
+
+    conversation_id: Mapped[int] = mapped_column(
+        ForeignKey("conversations.id"), primary_key=True
+    )
+    tag_id: Mapped[int] = mapped_column(ForeignKey("taxonomy_tags.id"), primary_key=True)
+    assigned_by: Mapped[int] = mapped_column(ForeignKey("users.id"), nullable=False)
+    assigned_at: Mapped[object] = mapped_column(
+        DateTime(timezone=True), server_default=func.now(), nullable=False
+    )
+
+    conversation = relationship("Conversation")
+    tag = relationship("TaxonomyTag")
+    assigned_by_user = relationship("User")
 
 
 class MessageReceipt(Base):

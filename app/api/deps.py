@@ -66,6 +66,8 @@ def ensure_can_view_conversation(user: User, conversation: Conversation) -> None
 
 
 def ensure_can_respond_conversation(user: User, conversation: Conversation) -> None:
+    if user.role == UserRole.SUPERVISOR:
+        raise HTTPException(status_code=status.HTTP_403_FORBIDDEN, detail="Forbidden")
     if conversation.state != ConversationState.ASIGNADO:
         raise HTTPException(status_code=status.HTTP_403_FORBIDDEN, detail="Forbidden")
     if conversation.assigned_to != user.id:
