@@ -1,0 +1,179 @@
+# GCP Environment Variables Template
+# Copy this file to .gcp-env and customize for your deployment
+# Usage: source .gcp-env
+
+#==============================================================================
+# PROJECT & REGION
+#==============================================================================
+
+# GCP Project ID (REQUIRED)
+PROJECT_ID="my-project-id"
+
+# Primary region for resources
+REGION="us-central1"
+
+# Primary zone (if using zonal resources like GCE)
+ZONE="us-central1-a"
+
+# Environment (dev, staging, prod)
+ENVIRONMENT="dev"
+
+#==============================================================================
+# RESOURCE NAMING
+#==============================================================================
+
+# Base name for resources (used as prefix)
+BASE_NAME="myapp"
+
+# Owner/team identifier (for labels)
+OWNER="platform-team"
+
+# Cost center (for billing labels)
+COST_CENTER="engineering"
+
+#==============================================================================
+# SERVICE ACCOUNTS
+#==============================================================================
+
+# Runtime service account (used BY services)
+RUNTIME_SA_NAME="${BASE_NAME}-runtime-sa"
+RUNTIME_SA_EMAIL="${RUNTIME_SA_NAME}@${PROJECT_ID}.iam.gserviceaccount.com"
+
+# CI/CD deployer service account
+CICD_SA_NAME="${BASE_NAME}-cicd-sa"
+CICD_SA_EMAIL="${CICD_SA_NAME}@${PROJECT_ID}.iam.gserviceaccount.com"
+
+#==============================================================================
+# CLOUD RUN
+#==============================================================================
+
+# Cloud Run service name
+SERVICE_NAME="${BASE_NAME}-service"
+
+# Container image (GCR or Artifact Registry)
+IMAGE="gcr.io/${PROJECT_ID}/${BASE_NAME}:latest"
+
+# Cloud Run memory limit
+MEMORY="512Mi"
+
+# Cloud Run CPU count
+CPU="1"
+
+# Max instances
+MAX_INSTANCES="10"
+
+# Min instances (0 for scale to zero)
+MIN_INSTANCES="0"
+
+# Concurrency (requests per container)
+CONCURRENCY="80"
+
+# Timeout (seconds)
+TIMEOUT="300"
+
+#==============================================================================
+# CLOUD SQL (if applicable)
+#==============================================================================
+
+# Cloud SQL instance name
+SQL_INSTANCE_NAME="${BASE_NAME}-db"
+
+# Database version (POSTGRES_14, MYSQL_8_0, etc.)
+SQL_DATABASE_VERSION="POSTGRES_14"
+
+# Tier (db-f1-micro, db-g1-small, db-n1-standard-1, etc.)
+SQL_TIER="db-f1-micro"
+
+# Database name
+DATABASE_NAME="${BASE_NAME}_db"
+
+# Database user
+DB_USER="app_user"
+
+#==============================================================================
+# STORAGE
+#==============================================================================
+
+# GCS bucket for application data
+DATA_BUCKET="${PROJECT_ID}-${BASE_NAME}-data"
+
+# GCS bucket for logs/backups
+BACKUP_BUCKET="${PROJECT_ID}-${BASE_NAME}-backups"
+
+# Storage class (STANDARD, NEARLINE, COLDLINE, ARCHIVE)
+STORAGE_CLASS="STANDARD"
+
+#==============================================================================
+# SECRET MANAGER (if applicable)
+#==============================================================================
+
+# Secret names
+DB_PASSWORD_SECRET="db-password"
+API_KEY_SECRET="api-key"
+
+#==============================================================================
+# PUB/SUB (if applicable)
+#==============================================================================
+
+# Topic name
+PUBSUB_TOPIC="${BASE_NAME}-events"
+
+# Subscription name
+PUBSUB_SUBSCRIPTION="${BASE_NAME}-events-sub"
+
+# Message retention (seconds, max 604800 = 7 days)
+MESSAGE_RETENTION="604800"
+
+#==============================================================================
+# NETWORKING (if using custom VPC)
+#==============================================================================
+
+# VPC network name
+NETWORK_NAME="${BASE_NAME}-vpc"
+
+# Subnet name
+SUBNET_NAME="${BASE_NAME}-subnet"
+
+# Subnet CIDR
+SUBNET_CIDR="10.0.0.0/24"
+
+# VPC Connector (for Cloud Run to VPC access)
+VPC_CONNECTOR="${BASE_NAME}-connector"
+
+#==============================================================================
+# LABELS (applied to all resources)
+#==============================================================================
+
+# Standard labels
+LABELS="env=${ENVIRONMENT},owner=${OWNER},cost-center=${COST_CENTER},managed-by=gcloud"
+
+#==============================================================================
+# FEATURE FLAGS
+#==============================================================================
+
+# Allow unauthenticated access (true/false)
+ALLOW_UNAUTHENTICATED="false"
+
+# Enable VPC access (true/false)
+ENABLE_VPC="false"
+
+# Enable Cloud SQL proxy (true/false)
+ENABLE_CLOUD_SQL="false"
+
+#==============================================================================
+# VALIDATION
+#==============================================================================
+
+# Validate required variables
+if [[ -z "$PROJECT_ID" ]] || [[ "$PROJECT_ID" == "my-project-id" ]]; then
+  echo "ERROR: PROJECT_ID not set or still using placeholder"
+  echo "Edit .gcp-env and set your actual PROJECT_ID"
+  return 1
+fi
+
+# Display loaded configuration
+echo "Loaded GCP environment configuration:"
+echo "  Project: $PROJECT_ID"
+echo "  Region: $REGION"
+echo "  Environment: $ENVIRONMENT"
+echo "  Service: $SERVICE_NAME"
