@@ -222,7 +222,17 @@ abbrev_path() {
 
 WORKSPACE_LABEL="$(basename "$PWD")"
 SCREENSHOTS_LABEL="$(abbrev_path "$SCREENSHOTS_DIR")"
-echo "[sb] Volumes: ${WORKSPACE_LABEL} -> /workspace, ${SCREENSHOTS_LABEL}:ro -> /screenshots, ${SCREENSHOTS_LABEL}:ro -> /root/Desktop/screenshots, ~/.ssh/id_ed25519_github_new:ro -> /root/.ssh/id_ed25519_github_new, ~/.ssh/id_ed25519_github_new.pub:ro -> /root/.ssh/id_ed25519_github_new.pub, ~/.ssh-codex/known_hosts -> /root/.ssh/known_hosts, ~/.gitconfig:ro -> /root/.gitconfig.host, ~/.codex -> /root/.codex, codex_home -> /root, codex_cache -> /root/.cache"
+echo "[sb] Volumes [host->container]:"
+echo "  - ${WORKSPACE_LABEL} -> /workspace (rw)"
+echo "  - ${SCREENSHOTS_LABEL} -> /screenshots (ro)"
+echo "  - ${SCREENSHOTS_LABEL} -> /root/Desktop/screenshots (ro)"
+echo "  - ~/.ssh/id_ed25519_github_new -> /root/.ssh/id_ed25519_github_new (ro)"
+echo "  - ~/.ssh/id_ed25519_github_new.pub -> /root/.ssh/id_ed25519_github_new.pub (ro)"
+echo "  - ~/.ssh-codex/known_hosts -> /root/.ssh/known_hosts (rw)"
+echo "  - ~/.gitconfig -> /root/.gitconfig.host (ro)"
+echo "  - ~/.codex -> /root/.codex (rw)"
+echo "  - codex_home -> /root (rw)"
+echo "  - codex_cache -> /root/.cache (rw)"
 
 docker run --rm -it \
   --init \
