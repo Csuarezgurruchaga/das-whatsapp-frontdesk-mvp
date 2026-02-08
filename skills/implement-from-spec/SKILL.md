@@ -1,5 +1,5 @@
 ---
-name: implement-from-spec-git
+name: implement-from-spec
 description: Implement code strictly from an approved SPEC/PLAN/TASKS/ACCEPTANCE, execute 1–2 atomic tasks per chunk, and use Git discipline (branch-per-spec, 1 commit per task, push per chunk). Maintain TASKS Execution status + CHECKPOINT.md for safe resumption.
 metadata:
   short-description: Execute implementation from SPEC/PLAN/TASKS/ACCEPTANCE + Git discipline (atomic commits + push per chunk)
