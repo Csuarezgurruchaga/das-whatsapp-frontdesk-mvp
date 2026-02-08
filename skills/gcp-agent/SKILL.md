@@ -16,6 +16,9 @@ Deliver **repeatable**, **least-privilege**, **validated** GCP implementations u
 - **Standard (default)**: typical multi-step work → + IAM + Pre-checks + Troubleshooting
 - **Audit**: production/compliance-critical → + Cost + Quotas + Security + Rollback
 
+> **Incident handling note**
+> If the user reports production impact (e.g., outage/down/5xx/timeouts/urgent incident), prioritize evidence-first triage and mitigation (read-only first unless explicitly authorized), and include the Root-cause report output (postmortem-lite) described below.
+
 ---
 
 ## References (use on demand)
@@ -25,7 +28,7 @@ Deliver **repeatable**, **least-privilege**, **validated** GCP implementations u
 - Production hardening → `references/production-checklist.md`
 
 Templates/scripts:
-- `assets/templates/base-deployment.sh`, `assets/templates/gcp-env.template`, `assets/templates/cloud-run-full.sh`
+- `assets/templates/base-deployment.sh`, `assets/templates/gcp-env.template`, `assets/templates/cloud-run-full.sh`, `assets/templates/root-cause-report.md.tpl`
 - `scripts/context-check.sh`, `scripts/cleanup-helper.sh`, `scripts/state-tracker.sh`
 
 ---
@@ -108,6 +111,9 @@ Always produce:
 2) Variables block (`.gcp-env`)
 3) Commands (scoped + idempotent)
 4) Validation block (3-tier)
+5) Root-cause report (postmortem-lite)
+   - If the user reports production impact (incident/outage/urgent): **MUST** fill using `assets/templates/root-cause-report.md.tpl`
+   - Otherwise: `N/A` unless user asks
 
 Include when relevant:
 - IAM setup (point to `references/iam-patterns.md`)
@@ -124,3 +130,4 @@ Include when relevant:
 - 3-tier validation included
 - Trackable (labels/state) and cleanup included when appropriate
 - Context verification runs first
+- If production impact is reported: Root-cause report is included
