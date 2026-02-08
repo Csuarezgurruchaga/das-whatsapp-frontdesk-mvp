@@ -13,7 +13,7 @@ set -euo pipefail
 need() { command -v "$1" >/dev/null 2>&1 || { echo "Missing dependency: $1"; exit 1; }; }
 need gum
 
-STATE_FILE="${HOME}/.codex/skills/spec-interview/scripts/.interview_state.sh"
+STATE_FILE="${HOME}/.codex/dev-tools/spec-interview-ui-wrapper/scripts/.interview_state.sh"
 
 usage() {
   cat <<'USAGE'

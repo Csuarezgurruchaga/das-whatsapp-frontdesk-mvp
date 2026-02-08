@@ -10,6 +10,7 @@ Important:
 Primary entrypoints:
 - `scripts/codex-interview-wrapper.py`
 - `scripts/sb-interview-ui`
+- `scripts/interview_ui.sh`
 
 Docs:
 - `docs/SB-INTERVIEW.md`
