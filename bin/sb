@@ -174,7 +174,7 @@ HOST_PORT_8000=$((8000 + PORT_OFFSET))
 HOST_PORT_8080=$((8080 + PORT_OFFSET))
 
 echo "[sb] Session: ${SESSION_ID} (container: ${CONTAINER_NAME})"
-echo "[sb] Ports: ${HOST_PORT_3000}->3000, ${HOST_PORT_5173}->5173, ${HOST_PORT_8000}->8000, ${HOST_PORT_8080}->8080"
+echo "[sb] Ports [host->container]: ${HOST_PORT_3000}->3000, ${HOST_PORT_5173}->5173, ${HOST_PORT_8000}->8000, ${HOST_PORT_8080}->8080"
 if [ "${KILL_OTHERS}" -eq 1 ]; then
   echo "[sb] kill-others enabled"
 fi
