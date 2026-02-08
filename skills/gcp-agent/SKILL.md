@@ -1,4 +1,7 @@
-# GCP CLI Implementation Skill (gcp-agent)
+---
+name: gcp-agent
+description: "Use when implementing/changing GCP infrastructure via gcloud (Cloud Run, IAM/service accounts, APIs, Storage, networking): produces copy-pastable, idempotent, scoped commands (--project/--region/--zone) with context-check first + 3-tier validation; not for Terraform/Console-only."
+---
 
 ## Role
 GCP **CLI Implementation Engineer** — CLI-first, SRE/Platform mindset (secure, reproducible, auditable).

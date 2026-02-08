@@ -198,7 +198,13 @@ Provides real browser automation for UI verification (navigate, click, fill form
 - "Check main navigation links aren’t broken"
 - "Reproduce bug: [steps] and capture screenshots + console errors"
 
-## 2026-02-05 Development Log
+## Work Log
+
+- date: 2026-02-08
+- context: `bin/sb-ui`
+- problem: `sb-ui` fallaba con `python3: can't open file '/Users/csuarezgurruchaga/dev-tools/.../codex-interview-wrapper.py'` al ejecutarse desde `~/.bin/sb-ui` (symlink), porque la raíz se calculaba desde la ruta del symlink.
+- solution: se agregó resolución explícita de symlinks (`readlink` loop) antes de calcular `ROOT_DIR`, de modo que el script siempre derive a `~/.codex/...`.
+- proof: `ls -la ~/.bin/sb-ui ~/.codex/bin/sb-ui ~/.codex/dev-tools/spec-interview-ui-wrapper/scripts/codex-interview-wrapper.py` y `python3 ~/.codex/dev-tools/spec-interview-ui-wrapper/scripts/codex-interview-wrapper.py --help`.
 
 - date: 2026-02-05
 - context: `skills/spec-interview/scripts/codex-interview-wrapper.py` parser de rondas (Qn/opciones)
@@ -206,3 +212,10 @@ Provides real browser automation for UI verification (navigate, click, fill form
 - solution: Se endureció `_strip_inline_chrome` para cortar nuevas variantes de chrome/status y se ajustó `_is_option_continuation_line` para ignorar fragmentos cortos de un solo token que no son continuidad real de opciones.
 - notes: Se agregó repro automatizado para la variante observada y se mantuvieron verdes los tests existentes del wrapper.
 - proof: `python3 -m unittest -v skills/spec-interview/scripts/tests/test_codex_interview_wrapper.py`
+
+- date: 2026-02-08
+- context: `bin/sb-ui` (host vs container path)
+- problem: `sb-ui` seguía fallando con `can't open file '/Users/.../.codex/dev-tools/.../codex-interview-wrapper.py'` porque ese path de host se pasaba a `sb` y se intentaba resolver dentro del contenedor.
+- solution: `bin/sb-ui` ahora valida `HOST_WRAPPER_PATH` en host y ejecuta dentro de `sb` usando `CONTAINER_WRAPPER_PATH=/root/.codex/dev-tools/spec-interview-ui-wrapper/scripts/codex-interview-wrapper.py`.
+- notes: se mantuvo resolución de symlink para localizar correctamente la raíz de `~/.codex` cuando `sb-ui` se invoca desde `~/.bin/sb-ui`.
+- proof: `bash -n ~/.codex/bin/sb-ui` y `ls -la ~/.codex/dev-tools/spec-interview-ui-wrapper/scripts/codex-interview-wrapper.py`.

@@ -1,6 +1,6 @@
 # sb-interview-ui shortcut
 
-To avoid `cd ~/.codex/skills/spec-interview/scripts` and manually run the Python script,
+To avoid `cd ~/.codex/dev-tools/spec-interview-ui-wrapper/scripts` and manually run the Python script,
 a lightweight shortcut script is provided (`sb-interview-ui`). It simply executes
 `codex-interview-wrapper.py` via `python3` so you can call the UI from anywhere.
 
@@ -10,7 +10,7 @@ a lightweight shortcut script is provided (`sb-interview-ui`). It simply execute
 2. Create a symlink pointing at the new script, for example:
 
    ```bash
-   ln -sf "$HOME/.codex/skills/spec-interview/scripts/sb-interview-ui" "$HOME/.local/bin/sb-interview-ui"
+   ln -sf "$HOME/.codex/dev-tools/spec-interview-ui-wrapper/scripts/sb-interview-ui" "$HOME/.local/bin/sb-interview-ui"
    ```
 
 3. Ensure the directory is earlier in your `PATH` than the default `sb` commands so the shortcut
