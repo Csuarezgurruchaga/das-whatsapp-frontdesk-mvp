@@ -15,9 +15,6 @@ sessions/
 shell_snapshots/
 secrets/
 
-# Prompt hygiene: only track continue-ma
-prompts/continue.md
-
 # Skill folder local artifacts
 skills/.DS_Store
 
