@@ -1,5 +1,5 @@
 model = "gpt-5.3-codex"
-model_reasoning_effort = "medium"
+model_reasoning_effort = "high"
 model_verbosity = "medium"
 model_auto_compact_token_limit=1000000000
 web_search = "live"
@@ -97,6 +97,9 @@ trust_level = "trusted"
 
 [projects."/Users/csuarezgurruchaga/.bin"]
 trust_level = "trusted"
+
+[projects."/Users/csuarezgurruchaga/Desktop/EVENTUALLY - AI/BB-Landing-Page"]
+trust_level = "untrusted"
 
 [notice]
 hide_rate_limit_model_nudge = true
