@@ -219,3 +219,10 @@ Provides real browser automation for UI verification (navigate, click, fill form
 - solution: `bin/sb-ui` ahora valida `HOST_WRAPPER_PATH` en host y ejecuta dentro de `sb` usando `CONTAINER_WRAPPER_PATH=/root/.codex/dev-tools/spec-interview-ui-wrapper/scripts/codex-interview-wrapper.py`.
 - notes: se mantuvo resolución de symlink para localizar correctamente la raíz de `~/.codex` cuando `sb-ui` se invoca desde `~/.bin/sb-ui`.
 - proof: `bash -n ~/.codex/bin/sb-ui` y `ls -la ~/.codex/dev-tools/spec-interview-ui-wrapper/scripts/codex-interview-wrapper.py`.
+
+-
+- date: 2026-02-09
+- context: `bin/sb` (screenshots mount)
+- problem: El host dir `~/Desktop/screenshots` se montaba dos veces dentro del contenedor (`/screenshots` y `/root/Desktop/screenshots`), redundante y ruidoso en el log.
+- solution: Se dejó un único bind mount a `/screenshots` y se mantuvo compatibilidad creando un symlink best-effort `"$HOME/Desktop/screenshots" -> /screenshots` al iniciar el contenedor.
+- proof: `bash -n bin/sb`

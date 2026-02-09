@@ -225,7 +225,6 @@ SCREENSHOTS_LABEL="$(abbrev_path "$SCREENSHOTS_DIR")"
 echo "[sb] Volumes [host->container]:"
 echo "  - ${WORKSPACE_LABEL} -> /workspace (rw)"
 echo "  - ${SCREENSHOTS_LABEL} -> /screenshots (ro)"
-echo "  - ${SCREENSHOTS_LABEL} -> /root/Desktop/screenshots (ro)"
 echo "  - ~/.ssh/id_ed25519_github_new -> /root/.ssh/id_ed25519_github_new (ro)"
 echo "  - ~/.ssh/id_ed25519_github_new.pub -> /root/.ssh/id_ed25519_github_new.pub (ro)"
 echo "  - ~/.ssh-codex/known_hosts -> /root/.ssh/known_hosts (rw)"
@@ -255,7 +254,6 @@ docker run --rm -it \
   -e HOME=/root \
   -v "$PWD:/workspace" \
   -v "${SCREENSHOTS_DIR}:/screenshots:ro" \
-  -v "${SCREENSHOTS_DIR}:/root/Desktop/screenshots:ro" \
   -w /workspace \
   -v "$HOME/.ssh/id_ed25519_github_new:/root/.ssh/id_ed25519_github_new:ro" \
   -v "$HOME/.ssh/id_ed25519_github_new.pub:/root/.ssh/id_ed25519_github_new.pub:ro" \
@@ -266,12 +264,22 @@ docker run --rm -it \
   -v codex_cache:/root/.cache \
   codex-sandbox:rg \
   bash -lc '
-    export PATH="/root/.npm-global/bin:/usr/local/sbin:/usr/local/bin:/usr/sbin:/usr/bin:/sbin:/bin"
-    set -euo pipefail
-
-    git config --global user.email "csuarezgurruchaga@gmail.com"
-    git config --global user.name "C. Suarez Gurruchaga"
-    git config --global --add safe.directory "*"
+	    export PATH="/root/.npm-global/bin:/usr/local/sbin:/usr/local/bin:/usr/sbin:/usr/bin:/sbin:/bin"
+	    set -euo pipefail
+	    mkdir -p "$HOME/Desktop"
+	    # Keep legacy "$HOME/Desktop/screenshots" working without an extra bind mount.
+	    if [ -e "$HOME/Desktop/screenshots" ] && [ ! -L "$HOME/Desktop/screenshots" ]; then
+	      if [ -d "$HOME/Desktop/screenshots" ] && [ -z "$(ls -A "$HOME/Desktop/screenshots" 2>/dev/null || true)" ]; then
+	        rmdir "$HOME/Desktop/screenshots" 2>/dev/null || true
+	      else
+	        mv "$HOME/Desktop/screenshots" "$HOME/Desktop/screenshots.bak.$(date +%s)" 2>/dev/null || true
+	      fi
+	    fi
+	    ln -sfn /screenshots "$HOME/Desktop/screenshots" 2>/dev/null || true
+	
+	    git config --global user.email "csuarezgurruchaga@gmail.com"
+	    git config --global user.name "C. Suarez Gurruchaga"
+	    git config --global --add safe.directory "*"
 
     mkdir -p "$HOME/.ssh" && chmod 700 "$HOME/.ssh"
     printf "Host github.com\n  HostName github.com\n  User git\n  IdentityFile ~/.ssh/id_ed25519_github_new\n  IdentitiesOnly yes\n" > "$HOME/.ssh/config"
