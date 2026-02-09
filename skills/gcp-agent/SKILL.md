@@ -125,10 +125,27 @@ gcloud config get-value account
 gcloud config get-value project
 gcloud config get-value compute/region
 gcloud config get-value compute/zone
+gcloud config get-value auth/impersonate_service_account
 ```
+
+If `auth/impersonate_service_account` is empty, you MUST ask the user for the Service Account email to use for this client/project and set it for this session before proceeding.
+
+Recommended (set once per session):
+
+```bash
+export IMPERSONATE_SA="svc-codex-ops@CLIENT_PROJECT_ID.iam.gserviceaccount.com"
+gcloud --quiet config set auth/impersonate_service_account "$IMPERSONATE_SA"
+gcloud config get-value auth/impersonate_service_account
+```
+
+Alternative (no config mutation; more verbose): include `--impersonate-service-account="$IMPERSONATE_SA"` on every `gcloud` command you output.
 
 ### 2) Variables block (ALWAYS)
 Output a copy-pastable `.gcp-env` block (placeholders allowed), then `source .gcp-env`.
+
+For multi-client workflows, your `.gcp-env` SHOULD include:
+
+- `IMPERSONATE_SA="svc-codex-ops@CLIENT_PROJECT_ID.iam.gserviceaccount.com"`
 
 ### 3) Pre-checks (Standard/Audit; Quick if needed)
 As relevant: APIs enabled, billing, quotas, required roles/identities.

@@ -226,3 +226,38 @@ Provides real browser automation for UI verification (navigate, click, fill form
 - problem: El host dir `~/Desktop/screenshots` se montaba dos veces dentro del contenedor (`/screenshots` y `/root/Desktop/screenshots`), redundante y ruidoso en el log.
 - solution: Se dejó un único bind mount a `/screenshots` y se mantuvo compatibilidad creando un symlink best-effort `"$HOME/Desktop/screenshots" -> /screenshots` al iniciar el contenedor.
 - proof: `bash -n bin/sb`
+
+-
+- date: 2026-02-09
+- context: `bin/sb` (GCP auth + gcloud bootstrap)
+- problem: En sesiones `sb-ui`/Codex faltaban credenciales/dependencias para que `$gcp-agent` pudiera operar en GCP (leer logs, diagnosticar y gestionar servicios) desde el contenedor.
+- solution: `bin/sb` ahora (1) autodetecta el directorio de config de `gcloud` del host (macOS) y lo monta `ro` en `/gcloud-host`, (2) “seed once” a un `CLOUDSDK_CONFIG` aislado `/root/.codex/gcloud` (persistente) para evitar escrituras al host, (3) requiere `SB_GCP_IMPERSONATE_SA` y configura `auth/impersonate_service_account` en el config aislado, y (4) hace bootstrap best-effort de `gcloud` si no está disponible en la imagen.
+- proof: `bash -n bin/sb` y `bash -n bin/sb-ui`
+
+-
+- date: 2026-02-09
+- context: `bin/sb` (GCP opt-out)
+- problem: `sb` quedaba “atado” a GCP: exigía `SB_GCP_IMPERSONATE_SA` incluso cuando no se estaba trabajando con GCP.
+- solution: Se agregó `SB_DISABLE_GCP=1` para deshabilitar bootstrap de GCP (no requiere `SB_GCP_IMPERSONATE_SA`, no monta `/gcloud-host`, no configura `CLOUDSDK_CONFIG`/impersonación).
+- proof: `bash -n bin/sb`
+
+-
+- date: 2026-02-09
+- context: `bin/sb` (prompt de Service Account)
+- problem: Con múltiples clientes/proyectos, fijar un único `SB_GCP_IMPERSONATE_SA` global en `~/.zshrc` no es práctico y aumenta el riesgo de usar la identidad equivocada.
+- solution: Si GCP está habilitado y `SB_GCP_IMPERSONATE_SA` no está seteada, `sb` ahora solicita interactivamente el email del Service Account para esa sesión (fallback). Se puede desactivar el prompt con `SB_GCP_PROMPT_SA=0`.
+- proof: `bash -n bin/sb`
+
+-
+- date: 2026-02-09
+- context: `$gcp-agent` (impersonation prompt when needed)
+- problem: Pedir el Service Account al arrancar `sb-ui` era molesto; idealmente se elige la identidad cuando realmente se van a correr comandos GCP (especialmente en flujos multi-cliente).
+- solution: La selección de SA se mueve al workflow del skill: `skills/gcp-agent/SKILL.md` ahora requiere verificar `auth/impersonate_service_account` y, si está vacío, pedir al usuario el SA y configurarlo para esa sesión (o usar `--impersonate-service-account` por comando).
+- proof: `rg -n \"auth/impersonate_service_account\" skills/gcp-agent/SKILL.md`
+
+-
+- date: 2026-02-09
+- context: `bin/sb` (remover prompt de SA)
+- problem: El prompt de `sb` para elegir SA aparecía demasiado temprano (al iniciar `sb-ui`), incluso si no se iba a usar GCP en esa sesión.
+- solution: Se removió el prompt host-side en `bin/sb`; ahora la elección del SA ocurre “just-in-time” en `$gcp-agent` (y opcionalmente se puede preconfigurar con `SB_GCP_IMPERSONATE_SA`).
+- proof: `rg -n \"intentionally do NOT prompt\" bin/sb`

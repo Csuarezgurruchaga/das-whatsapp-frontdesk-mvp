@@ -111,26 +111,10 @@ fi
 # 0.4) Sanity check: GCP impersonation target (required)
 # ----------------------------
 if [ "${GCP_ENABLED}" -eq 1 ]; then
-  if [ -z "${SB_GCP_IMPERSONATE_SA:-}" ]; then
-    if [ "${SB_GCP_PROMPT_SA:-1}" = "0" ] || [ ! -t 0 ]; then
-      echo "[sb] ERROR: SB_GCP_IMPERSONATE_SA is not set in the host shell." >&2
-      echo "     Set it (recommended in ~/.zshrc), for example:" >&2
-      echo "       export SB_GCP_IMPERSONATE_SA='svc-codex@YOUR_PROJECT.iam.gserviceaccount.com'" >&2
-      echo "     Or disable GCP for this session: export SB_DISABLE_GCP=1" >&2
-      echo "     Or allow prompting (interactive only): unset SB_GCP_PROMPT_SA or set it to 1" >&2
-      exit 1
-    fi
-
-    echo "[sb] SB_GCP_IMPERSONATE_SA is not set."
-    echo "     Enter the Service Account email to impersonate for THIS session."
-    echo "     Tip: for multi-client work, define shell functions like: SB_GCP_IMPERSONATE_SA=... sb-ui"
-    read -r -p "[sb] Service Account email: " SB_GCP_IMPERSONATE_SA
-    if [ -z "${SB_GCP_IMPERSONATE_SA:-}" ]; then
-      echo "[sb] ERROR: empty Service Account email." >&2
-      exit 1
-    fi
-    export SB_GCP_IMPERSONATE_SA
-  fi
+  # NOTE: We intentionally do NOT prompt for SB_GCP_IMPERSONATE_SA here.
+  # Multi-client workflows commonly want to defer choosing the target SA until actually running GCP commands.
+  # The $gcp-agent skill should request/select an SA when needed, then configure impersonation inside the sandbox.
+  :
 fi
 
 # ----------------------------
@@ -366,10 +350,6 @@ docker run "${DOCKER_ARGS[@]}" \
 	    else
 	      export CLOUDSDK_CONFIG="/root/.codex/gcloud"
 	      export CLOUDSDK_CORE_DISABLE_PROMPTS=1
-	      if [ -z "${SB_GCP_IMPERSONATE_SA:-}" ]; then
-	        echo "[sb] ERROR: SB_GCP_IMPERSONATE_SA is not set inside the container." >&2
-	        exit 1
-	      fi
 
 	      ensure_gcloud() {
 	        if command -v gcloud >/dev/null 2>&1; then
@@ -410,14 +390,19 @@ docker run "${DOCKER_ARGS[@]}" \
 	      fi
 
 	      echo "[sb] GCP: CLOUDSDK_CONFIG=$CLOUDSDK_CONFIG (seeded=$seeded)"
-	      echo "[sb] GCP: impersonate=$SB_GCP_IMPERSONATE_SA"
 
 	      # Ensure there is no default project (force explicit --project on commands).
 	      gcloud --quiet config unset core/project >/dev/null 2>&1 || true
-	      # Set SA impersonation as the default identity for operations.
-	      if ! gcloud --quiet config set auth/impersonate_service_account "$SB_GCP_IMPERSONATE_SA" >/dev/null 2>&1; then
-	        echo "[sb] ERROR: failed to set gcloud impersonation to: $SB_GCP_IMPERSONATE_SA" >&2
-	        exit 1
+	      if [ -n "${SB_GCP_IMPERSONATE_SA:-}" ]; then
+	        echo "[sb] GCP: impersonate=$SB_GCP_IMPERSONATE_SA"
+	        # Set SA impersonation as the default identity for operations.
+	        if ! gcloud --quiet config set auth/impersonate_service_account "$SB_GCP_IMPERSONATE_SA" >/dev/null 2>&1; then
+	          echo "[sb] ERROR: failed to set gcloud impersonation to: $SB_GCP_IMPERSONATE_SA" >&2
+	          exit 1
+	        fi
+	      else
+	        # Avoid reusing a previous session impersonation by clearing it if unset for this session.
+	        gcloud --quiet config unset auth/impersonate_service_account >/dev/null 2>&1 || true
 	      fi
 	    fi
 	    mkdir -p "$HOME/Desktop"
