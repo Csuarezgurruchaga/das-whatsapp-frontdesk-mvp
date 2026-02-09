@@ -11,6 +11,13 @@ from app.db.session import SessionLocal, get_engine
 from app.security import SESSION_COOKIE_NAME, decode_session_cookie
 
 
+def _coerce_utc(value: datetime) -> datetime:
+    if value.tzinfo is None:
+        # SQLite commonly returns naive datetimes even for timezone=True columns.
+        return value.replace(tzinfo=timezone.utc)
+    return value.astimezone(timezone.utc)
+
+
 def get_db() -> Session:
     engine = get_engine()
     db = SessionLocal(bind=engine)
@@ -34,7 +41,7 @@ def get_current_user(
         raise HTTPException(status_code=status.HTTP_401_UNAUTHORIZED, detail="Not authenticated")
 
     now = datetime.now(timezone.utc)
-    if user_session.expires_at <= now:
+    if _coerce_utc(user_session.expires_at) <= now:
         crud.revoke_user_session(db, user_session, revoked_at=now)
         db.commit()
         raise HTTPException(status_code=status.HTTP_401_UNAUTHORIZED, detail="Not authenticated")
