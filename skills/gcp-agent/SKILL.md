@@ -130,10 +130,26 @@ gcloud config get-value auth/impersonate_service_account
 
 If `auth/impersonate_service_account` is empty, you MUST ask the user for the Service Account email to use for this client/project and set it for this session before proceeding.
 
+For multi-client workflows, prefer selecting from saved aliases (and add new ones when needed):
+
+```bash
+python3 /root/.codex/skills/gcp-agent/scripts/sa-aliases.py list
+```
+
+Ask the user for either:
+- an existing alias (recommended), OR
+- a new alias + Service Account email to save.
+
+Then resolve the alias and export it:
+
+```bash
+export IMPERSONATE_ALIAS="acme-prod"
+export IMPERSONATE_SA="$(python3 /root/.codex/skills/gcp-agent/scripts/sa-aliases.py get "$IMPERSONATE_ALIAS")"
+```
+
 Recommended (set once per session):
 
 ```bash
-export IMPERSONATE_SA="svc-codex-ops@CLIENT_PROJECT_ID.iam.gserviceaccount.com"
 gcloud --quiet config set auth/impersonate_service_account "$IMPERSONATE_SA"
 gcloud config get-value auth/impersonate_service_account
 ```
@@ -145,6 +161,7 @@ Output a copy-pastable `.gcp-env` block (placeholders allowed), then `source .gc
 
 For multi-client workflows, your `.gcp-env` SHOULD include:
 
+- `IMPERSONATE_ALIAS="acme-prod"`
 - `IMPERSONATE_SA="svc-codex-ops@CLIENT_PROJECT_ID.iam.gserviceaccount.com"`
 
 ### 3) Pre-checks (Standard/Audit; Quick if needed)

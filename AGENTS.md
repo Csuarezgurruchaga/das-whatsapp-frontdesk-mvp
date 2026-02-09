@@ -261,3 +261,10 @@ Provides real browser automation for UI verification (navigate, click, fill form
 - problem: El prompt de `sb` para elegir SA aparecía demasiado temprano (al iniciar `sb-ui`), incluso si no se iba a usar GCP en esa sesión.
 - solution: Se removió el prompt host-side en `bin/sb`; ahora la elección del SA ocurre “just-in-time” en `$gcp-agent` (y opcionalmente se puede preconfigurar con `SB_GCP_IMPERSONATE_SA`).
 - proof: `rg -n \"intentionally do NOT prompt\" bin/sb`
+
+-
+- date: 2026-02-09
+- context: `$gcp-agent` (Service Account aliases)
+- problem: En flujos multi-cliente, escribir el email completo del Service Account en cada sesión es repetitivo y propenso a errores.
+- solution: Se agregó un store local de aliases (`~/.codex/secrets/gcp_sa_aliases.json`, ignorado por git) y un helper CLI `skills/gcp-agent/scripts/sa-aliases.py` para `list/get/set/rm`. El skill ahora recomienda elegir un alias y resolverlo a `IMPERSONATE_SA` cuando haga falta.
+- proof: `python3 skills/gcp-agent/scripts/sa-aliases.py --help`
