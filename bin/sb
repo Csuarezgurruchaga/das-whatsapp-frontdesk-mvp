@@ -99,6 +99,85 @@ if [ -z "${CONTEXT7_API_KEY:-}" ]; then
 fi
 
 # ----------------------------
+# 0.3.1) Optional: disable GCP bootstrap entirely
+# ----------------------------
+GCP_ENABLED=1
+if [ "${SB_DISABLE_GCP:-0}" = "1" ]; then
+  GCP_ENABLED=0
+  echo "[sb] NOTE: GCP bootstrap disabled (SB_DISABLE_GCP=1)."
+fi
+
+# ----------------------------
+# 0.4) Sanity check: GCP impersonation target (required)
+# ----------------------------
+if [ "${GCP_ENABLED}" -eq 1 ]; then
+  if [ -z "${SB_GCP_IMPERSONATE_SA:-}" ]; then
+    if [ "${SB_GCP_PROMPT_SA:-1}" = "0" ] || [ ! -t 0 ]; then
+      echo "[sb] ERROR: SB_GCP_IMPERSONATE_SA is not set in the host shell." >&2
+      echo "     Set it (recommended in ~/.zshrc), for example:" >&2
+      echo "       export SB_GCP_IMPERSONATE_SA='svc-codex@YOUR_PROJECT.iam.gserviceaccount.com'" >&2
+      echo "     Or disable GCP for this session: export SB_DISABLE_GCP=1" >&2
+      echo "     Or allow prompting (interactive only): unset SB_GCP_PROMPT_SA or set it to 1" >&2
+      exit 1
+    fi
+
+    echo "[sb] SB_GCP_IMPERSONATE_SA is not set."
+    echo "     Enter the Service Account email to impersonate for THIS session."
+    echo "     Tip: for multi-client work, define shell functions like: SB_GCP_IMPERSONATE_SA=... sb-ui"
+    read -r -p "[sb] Service Account email: " SB_GCP_IMPERSONATE_SA
+    if [ -z "${SB_GCP_IMPERSONATE_SA:-}" ]; then
+      echo "[sb] ERROR: empty Service Account email." >&2
+      exit 1
+    fi
+    export SB_GCP_IMPERSONATE_SA
+  fi
+fi
+
+# ----------------------------
+# 0.5) Detect host gcloud config dir (macOS)
+# ----------------------------
+GCLOUD_CONFIG_DIR=""
+if [ "${GCP_ENABLED}" -eq 1 ]; then
+  if [ -n "${SB_GCLOUD_CONFIG_DIR:-}" ]; then
+    GCLOUD_CONFIG_DIR="${SB_GCLOUD_CONFIG_DIR}"
+  else
+    if command -v gcloud >/dev/null 2>&1; then
+      GCLOUD_CONFIG_DIR="$(gcloud info --format='value(config.paths.global_config_dir)' 2>/dev/null || true)"
+    fi
+
+    if [ -z "${GCLOUD_CONFIG_DIR}" ]; then
+      if [ -d "$HOME/.config/gcloud" ] && [ -n "$(ls -A "$HOME/.config/gcloud" 2>/dev/null || true)" ]; then
+        GCLOUD_CONFIG_DIR="$HOME/.config/gcloud"
+      elif [ -d "$HOME/Library/Application Support/gcloud" ] && [ -n "$(ls -A "$HOME/Library/Application Support/gcloud" 2>/dev/null || true)" ]; then
+        GCLOUD_CONFIG_DIR="$HOME/Library/Application Support/gcloud"
+      elif [ -d "$HOME/.config/gcloud" ]; then
+        GCLOUD_CONFIG_DIR="$HOME/.config/gcloud"
+      elif [ -d "$HOME/Library/Application Support/gcloud" ]; then
+        GCLOUD_CONFIG_DIR="$HOME/Library/Application Support/gcloud"
+      fi
+    fi
+  fi
+
+  if [ -z "${GCLOUD_CONFIG_DIR}" ] || [ ! -d "${GCLOUD_CONFIG_DIR}" ]; then
+    echo "[sb] ERROR: Could not find host gcloud config directory." >&2
+    echo "     Tried:" >&2
+    echo "       - gcloud info --format='value(config.paths.global_config_dir)'" >&2
+    echo "       - ~/.config/gcloud" >&2
+    echo "       - ~/Library/Application Support/gcloud" >&2
+    echo "     Fix: install/auth gcloud on host, set SB_GCLOUD_CONFIG_DIR explicitly," >&2
+    echo "     or disable GCP for this session: export SB_DISABLE_GCP=1" >&2
+    exit 1
+  fi
+
+  if [ ! -f "${GCLOUD_CONFIG_DIR}/credentials.db" ] && [ ! -f "${GCLOUD_CONFIG_DIR}/application_default_credentials.json" ]; then
+    echo "[sb] WARNING: No obvious credentials found in: ${GCLOUD_CONFIG_DIR}" >&2
+    echo "     If auth fails in the sandbox, run on host:" >&2
+    echo "       gcloud auth login" >&2
+    echo "       gcloud auth application-default login" >&2
+  fi
+fi
+
+# ----------------------------
 # 1) Monitoreo de espacio
 # ----------------------------
 # This can be slow on some Docker setups. Skip with: SB_SKIP_DOCKER_DF=1
@@ -225,6 +304,10 @@ SCREENSHOTS_LABEL="$(abbrev_path "$SCREENSHOTS_DIR")"
 echo "[sb] Volumes [host->container]:"
 echo "  - ${WORKSPACE_LABEL} -> /workspace (rw)"
 echo "  - ${SCREENSHOTS_LABEL} -> /screenshots (ro)"
+if [ "${GCP_ENABLED}" -eq 1 ]; then
+  GCLOUD_LABEL="$(abbrev_path "$GCLOUD_CONFIG_DIR")"
+  echo "  - ${GCLOUD_LABEL} -> /gcloud-host (ro)"
+fi
 echo "  - ~/.ssh/id_ed25519_github_new -> /root/.ssh/id_ed25519_github_new (ro)"
 echo "  - ~/.ssh/id_ed25519_github_new.pub -> /root/.ssh/id_ed25519_github_new.pub (ro)"
 echo "  - ~/.ssh-codex/known_hosts -> /root/.ssh/known_hosts (rw)"
@@ -233,39 +316,110 @@ echo "  - ~/.codex -> /root/.codex (rw)"
 echo "  - codex_home -> /root (rw)"
 echo "  - codex_cache -> /root/.cache (rw)"
 
-docker run --rm -it \
-  --init \
-  --stop-timeout 10 \
-  --cidfile "${CIDFILE}" \
-  --label "${LABEL_KEY}=${LABEL_VAL}" \
-  --label "${LABEL_SESSION_KEY}=${SESSION_ID}" \
-  --name "${CONTAINER_NAME}" \
-  --user 0:0 \
-  --cap-add=NET_ADMIN \
-  --cap-add=NET_RAW \
-  -p "${HOST_PORT_3000}:3000" \
-  -p "${HOST_PORT_5173}:5173" \
-  -p "${HOST_PORT_8000}:8000" \
-  -p "${HOST_PORT_8080}:8080" \
-  -e OPENAI_ALLOWED_DOMAINS \
-  -e CONTEXT7_API_KEY \
-  -e GITHUB_USERNAME \
-  -e GITHUB_PERSONAL_ACCESS_TOKEN \
-  -e HOME=/root \
-  -v "$PWD:/workspace" \
-  -v "${SCREENSHOTS_DIR}:/screenshots:ro" \
-  -w /workspace \
-  -v "$HOME/.ssh/id_ed25519_github_new:/root/.ssh/id_ed25519_github_new:ro" \
-  -v "$HOME/.ssh/id_ed25519_github_new.pub:/root/.ssh/id_ed25519_github_new.pub:ro" \
-  -v "$HOME/.ssh-codex/known_hosts:/root/.ssh/known_hosts" \
-  -v "$HOME/.gitconfig:/root/.gitconfig.host:ro" \
-  -v "$HOME/.codex:/root/.codex" \
-  -v codex_home:/root \
-  -v codex_cache:/root/.cache \
+DOCKER_ARGS=(
+  --rm -it
+  --init
+  --stop-timeout 10
+  --cidfile "${CIDFILE}"
+  --label "${LABEL_KEY}=${LABEL_VAL}"
+  --label "${LABEL_SESSION_KEY}=${SESSION_ID}"
+  --name "${CONTAINER_NAME}"
+  --user 0:0
+  --cap-add=NET_ADMIN
+  --cap-add=NET_RAW
+  -p "${HOST_PORT_3000}:3000"
+  -p "${HOST_PORT_5173}:5173"
+  -p "${HOST_PORT_8000}:8000"
+  -p "${HOST_PORT_8080}:8080"
+  -e OPENAI_ALLOWED_DOMAINS
+  -e CONTEXT7_API_KEY
+  -e GITHUB_USERNAME
+  -e GITHUB_PERSONAL_ACCESS_TOKEN
+  -e SB_DISABLE_GCP
+  -e HOME=/root
+  -v "$PWD:/workspace"
+  -v "${SCREENSHOTS_DIR}:/screenshots:ro"
+  -w /workspace
+  -v "$HOME/.ssh/id_ed25519_github_new:/root/.ssh/id_ed25519_github_new:ro"
+  -v "$HOME/.ssh/id_ed25519_github_new.pub:/root/.ssh/id_ed25519_github_new.pub:ro"
+  -v "$HOME/.ssh-codex/known_hosts:/root/.ssh/known_hosts"
+  -v "$HOME/.gitconfig:/root/.gitconfig.host:ro"
+  -v "$HOME/.codex:/root/.codex"
+  -v codex_home:/root
+  -v codex_cache:/root/.cache
+)
+
+if [ "${GCP_ENABLED}" -eq 1 ]; then
+  DOCKER_ARGS+=(
+    -e SB_GCP_IMPERSONATE_SA
+    -v "${GCLOUD_CONFIG_DIR}:/gcloud-host:ro"
+  )
+fi
+
+docker run "${DOCKER_ARGS[@]}" \
   codex-sandbox:rg \
   bash -lc '
 	    export PATH="/root/.npm-global/bin:/usr/local/sbin:/usr/local/bin:/usr/sbin:/usr/bin:/sbin:/bin"
 	    set -euo pipefail
+	    if [ "${SB_DISABLE_GCP:-0}" = "1" ]; then
+	      echo "[sb] NOTE: SB_DISABLE_GCP=1 set; skipping gcloud bootstrap/auth setup."
+	    else
+	      export CLOUDSDK_CONFIG="/root/.codex/gcloud"
+	      export CLOUDSDK_CORE_DISABLE_PROMPTS=1
+	      if [ -z "${SB_GCP_IMPERSONATE_SA:-}" ]; then
+	        echo "[sb] ERROR: SB_GCP_IMPERSONATE_SA is not set inside the container." >&2
+	        exit 1
+	      fi
+
+	      ensure_gcloud() {
+	        if command -v gcloud >/dev/null 2>&1; then
+	          return 0
+	        fi
+	        if [ -x "$HOME/.codex/google-cloud-sdk/bin/gcloud" ]; then
+	          export PATH="$HOME/.codex/google-cloud-sdk/bin:$PATH"
+	          return 0
+	        fi
+
+	        echo "[sb] Installing Google Cloud SDK (gcloud) into $HOME/.codex/google-cloud-sdk..."
+	        if command -v curl >/dev/null 2>&1; then
+	          curl -sS https://sdk.cloud.google.com | bash -s -- --disable-prompts --install-dir="$HOME/.codex"
+	        elif command -v wget >/dev/null 2>&1; then
+	          wget -qO- https://sdk.cloud.google.com | bash -s -- --disable-prompts --install-dir="$HOME/.codex"
+	        else
+	          echo "[sb] ERROR: neither curl nor wget is available to install gcloud." >&2
+	          return 1
+	        fi
+
+	        export PATH="$HOME/.codex/google-cloud-sdk/bin:$PATH"
+	        command -v gcloud >/dev/null 2>&1
+	      }
+
+	      if ! ensure_gcloud; then
+	        echo "[sb] ERROR: gcloud is not available inside the sandbox and auto-install failed." >&2
+	        echo "     Fix: ensure the container can reach https://sdk.cloud.google.com, or bake gcloud into codex-sandbox:rg." >&2
+	        exit 1
+	      fi
+
+	      mkdir -p "$CLOUDSDK_CONFIG"
+	      seeded=0
+	      if [ -d /gcloud-host ]; then
+	        if [ -z "$(ls -A "$CLOUDSDK_CONFIG" 2>/dev/null || true)" ]; then
+	          cp -a /gcloud-host/. "$CLOUDSDK_CONFIG"/ 2>/dev/null || true
+	          seeded=1
+	        fi
+	      fi
+
+	      echo "[sb] GCP: CLOUDSDK_CONFIG=$CLOUDSDK_CONFIG (seeded=$seeded)"
+	      echo "[sb] GCP: impersonate=$SB_GCP_IMPERSONATE_SA"
+
+	      # Ensure there is no default project (force explicit --project on commands).
+	      gcloud --quiet config unset core/project >/dev/null 2>&1 || true
+	      # Set SA impersonation as the default identity for operations.
+	      if ! gcloud --quiet config set auth/impersonate_service_account "$SB_GCP_IMPERSONATE_SA" >/dev/null 2>&1; then
+	        echo "[sb] ERROR: failed to set gcloud impersonation to: $SB_GCP_IMPERSONATE_SA" >&2
+	        exit 1
+	      fi
+	    fi
 	    mkdir -p "$HOME/Desktop"
 	    # Keep legacy "$HOME/Desktop/screenshots" working without an extra bind mount.
 	    if [ -e "$HOME/Desktop/screenshots" ] && [ ! -L "$HOME/Desktop/screenshots" ]; then
