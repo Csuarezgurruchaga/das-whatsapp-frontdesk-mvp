@@ -351,14 +351,20 @@ docker run "${DOCKER_ARGS[@]}" \
 	      export CLOUDSDK_CONFIG="/root/.codex/gcloud"
 	      export CLOUDSDK_CORE_DISABLE_PROMPTS=1
 
-	      ensure_gcloud() {
-	        if command -v gcloud >/dev/null 2>&1; then
-	          return 0
-	        fi
-	        if [ -x "$HOME/.codex/google-cloud-sdk/bin/gcloud" ]; then
-	          export PATH="$HOME/.codex/google-cloud-sdk/bin:$PATH"
-	          return 0
-	        fi
+      ensure_gcloud() {
+        if [ -x /usr/bin/gcloud ] && /usr/bin/gcloud --version >/dev/null 2>&1; then
+          export PATH="/usr/bin:$PATH"
+          return 0
+        fi
+        if command -v gcloud >/dev/null 2>&1 && gcloud --version >/dev/null 2>&1; then
+          return 0
+        fi
+        if [ -x "$HOME/.codex/google-cloud-sdk/bin/gcloud" ]; then
+          export PATH="$HOME/.codex/google-cloud-sdk/bin:$PATH"
+          if gcloud --version >/dev/null 2>&1; then
+            return 0
+          fi
+        fi
 
 	        echo "[sb] Installing Google Cloud SDK (gcloud) into $HOME/.codex/google-cloud-sdk..."
 	        if command -v curl >/dev/null 2>&1; then
@@ -368,17 +374,23 @@ docker run "${DOCKER_ARGS[@]}" \
 	        else
 	          echo "[sb] ERROR: neither curl nor wget is available to install gcloud." >&2
 	          return 1
-	        fi
+        fi
 
-	        export PATH="$HOME/.codex/google-cloud-sdk/bin:$PATH"
-	        command -v gcloud >/dev/null 2>&1
-	      }
+        export PATH="$HOME/.codex/google-cloud-sdk/bin:$PATH"
+        gcloud --version >/dev/null 2>&1
+      }
 
 	      if ! ensure_gcloud; then
 	        echo "[sb] ERROR: gcloud is not available inside the sandbox and auto-install failed." >&2
 	        echo "     Fix: ensure the container can reach https://sdk.cloud.google.com, or bake gcloud into codex-sandbox:rg." >&2
 	        exit 1
 	      fi
+
+      # Keep /usr/local/bin/gcloud aligned to system gcloud when available.
+      if [ -x /usr/bin/gcloud ]; then
+        mkdir -p /usr/local/bin
+        ln -sfn /usr/bin/gcloud /usr/local/bin/gcloud 2>/dev/null || true
+      fi
 
 	      mkdir -p "$CLOUDSDK_CONFIG"
 	      seeded=0

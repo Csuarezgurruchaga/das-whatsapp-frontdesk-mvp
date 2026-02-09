@@ -268,3 +268,31 @@ Provides real browser automation for UI verification (navigate, click, fill form
 - problem: En flujos multi-cliente, escribir el email completo del Service Account en cada sesión es repetitivo y propenso a errores.
 - solution: Se agregó un store local de aliases (`~/.codex/secrets/gcp_sa_aliases.json`, ignorado por git) y un helper CLI `skills/gcp-agent/scripts/sa-aliases.py` para `list/get/set/rm`. El skill ahora recomienda elegir un alias y resolverlo a `IMPERSONATE_SA` cuando haga falta.
 - proof: `python3 skills/gcp-agent/scripts/sa-aliases.py --help`
+
+-
+- date: 2026-02-09
+- context: container (install `gcloud`)
+- problem: `gcloud` no estaba instalado en el contenedor y el bundle local `google-cloud-sdk/` estaba incompleto (fallaba al importar deps como `six`).
+- solution: Se instaló `google-cloud-cli` vía `apt` agregando el repo oficial de Google (`packages.cloud.google.com`).
+- proof: `gcloud --version` (Google Cloud SDK 555.0.0)
+
+-
+- date: 2026-02-09
+- context: `Dockerfile.codex-sandbox-rg` (build reproducible con `gcloud`)
+- problem: Dependíamos de bootstrap runtime y/o SDK persistido en `/root/.codex/google-cloud-sdk`, que puede quedar corrupto y pisar el binario del sistema vía `/usr/local/bin/gcloud`.
+- solution: Se agregó un Dockerfile reproducible que extiende `codex-sandbox:rg`, instala `google-cloud-cli` desde `packages.cloud.google.com` y fija `/usr/local/bin/gcloud -> /usr/bin/gcloud`.
+- proof: `docker build -t codex-sandbox:rg -f Dockerfile.codex-sandbox-rg .` y `docker run --rm codex-sandbox:rg gcloud --version`
+
+-
+- date: 2026-02-09
+- context: `Dockerfile.codex-sandbox-rg` (base image en Docker Desktop/BuildKit)
+- problem: `docker build --pull ...` intentaba resolver `FROM codex-sandbox:rg` contra registry remoto y fallaba aunque la imagen existiera localmente.
+- solution: El Dockerfile ahora acepta `ARG BASE_IMAGE`; se puede pasar `BASE_IMAGE=<image-id-local>` y construir sin depender de pull remoto del tag.
+- proof: `BASE_IMAGE=$(docker image inspect --format '{{.Id}}' codex-sandbox:rg)` + `docker build --pull=false --build-arg BASE_IMAGE="$BASE_IMAGE" -t codex-sandbox:rg -f Dockerfile.codex-sandbox-rg .`
+
+-
+- date: 2026-02-09
+- context: `bin/sb` (`gcloud` resolution order)
+- problem: Aunque la imagen tuviera `gcloud` del sistema, `sb` podía reusar/reapuntar a `/root/.codex/google-cloud-sdk/bin/gcloud` y volver a romper por SDK corrupto.
+- solution: `ensure_gcloud` ahora prioriza `/usr/bin/gcloud` (validando `gcloud --version`), valida ejecutabilidad real antes de aceptar binarios en PATH, y solo alinea `/usr/local/bin/gcloud` a `/usr/bin/gcloud`.
+- proof: `bash -n bin/sb` y `rg -n "ensure_gcloud|/usr/bin/gcloud|/usr/local/bin/gcloud" bin/sb`
