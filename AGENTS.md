@@ -296,3 +296,10 @@ Provides real browser automation for UI verification (navigate, click, fill form
 - problem: Aunque la imagen tuviera `gcloud` del sistema, `sb` podía reusar/reapuntar a `/root/.codex/google-cloud-sdk/bin/gcloud` y volver a romper por SDK corrupto.
 - solution: `ensure_gcloud` ahora prioriza `/usr/bin/gcloud` (validando `gcloud --version`), valida ejecutabilidad real antes de aceptar binarios en PATH, y solo alinea `/usr/local/bin/gcloud` a `/usr/bin/gcloud`.
 - proof: `bash -n bin/sb` y `rg -n "ensure_gcloud|/usr/bin/gcloud|/usr/local/bin/gcloud" bin/sb`
+
+-
+- date: 2026-02-09
+- context: `bin/sb` + `bin/sb-ui` (migracion entrypoint)
+- problem: `sb-ui` era el entrypoint real para el wrapper de interview UI; `sb` quedaba como runner de bajo nivel y casi no se usaba directo.
+- solution: `sb` ahora corre UI mode por defecto cuando se invoca sin args (y soporta `sb ui` explicito); `sb-ui` queda como shim de compatibilidad que delega a `sb ui`.
+- proof: `bash -n bin/sb bin/sb-ui`

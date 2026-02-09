@@ -2,6 +2,18 @@
 set -euo pipefail
 
 # ----------------------------
+# 0) Script paths (symlink-safe)
+# ----------------------------
+SCRIPT_SOURCE="${BASH_SOURCE[0]}"
+while [ -L "$SCRIPT_SOURCE" ]; do
+  LINK_DIR="$(cd "$(dirname "$SCRIPT_SOURCE")" && pwd)"
+  SCRIPT_SOURCE="$(readlink "$SCRIPT_SOURCE")"
+  [[ "$SCRIPT_SOURCE" != /* ]] && SCRIPT_SOURCE="$LINK_DIR/$SCRIPT_SOURCE"
+done
+SCRIPT_DIR="$(cd "$(dirname "$SCRIPT_SOURCE")" && pwd)"
+ROOT_DIR="$(cd "$SCRIPT_DIR/.." && pwd)"
+
+# ----------------------------
 # 0) Flags y sesion
 # ----------------------------
 KILL_OTHERS=0
@@ -39,10 +51,37 @@ while [ "$#" -gt 0 ]; do
   esac
 done
 
-if [ "${#POSITIONAL[@]}" -gt 0 ]; then
-  CMD=("${POSITIONAL[@]}")
+# ----------------------------
+# 0.0.1) sb-ui migration: default UI mode
+# ----------------------------
+# Historically, `sb-ui` was the entrypoint for the interview wrapper, and `sb` was often
+# only used as a lower-level container runner. We now treat the UI wrapper as the default
+# when `sb` is invoked with no positional args, while preserving the old behavior when a
+# command is provided (e.g. `sb bash -lc ...`, `sb codex`).
+CONTAINER_WRAPPER_PATH="/root/.codex/dev-tools/spec-interview-ui-wrapper/scripts/codex-interview-wrapper.py"
+HOST_WRAPPER_PATH="${HOME}/.codex/dev-tools/spec-interview-ui-wrapper/scripts/codex-interview-wrapper.py"
+
+UI_MODE=0
+UI_ARGS=()
+if [ "${#POSITIONAL[@]}" -eq 0 ]; then
+  UI_MODE=1
 else
-  CMD=(codex)
+  if [ "${POSITIONAL[0]}" = "ui" ]; then
+    UI_MODE=1
+    UI_ARGS=("${POSITIONAL[@]:1}")
+  fi
+fi
+
+if [ "${UI_MODE}" -eq 1 ]; then
+  if [ ! -f "${HOST_WRAPPER_PATH}" ]; then
+    echo "[sb] ERROR: UI wrapper not found on host: ${HOST_WRAPPER_PATH}" >&2
+    echo "     Fix: ensure ~/.codex is installed and contains dev-tools/spec-interview-ui-wrapper." >&2
+    echo "     (sb-ui previously required the same wrapper inside the sandbox at: ${CONTAINER_WRAPPER_PATH})" >&2
+    exit 1
+  fi
+  CMD=(bash -lc "python3 \"${CONTAINER_WRAPPER_PATH}\" --cmd \"codex --no-alt-screen\" \"\$@\" < /dev/tty" -- "${UI_ARGS[@]}")
+else
+  CMD=("${POSITIONAL[@]}")
 fi
 
 if [ -z "${SESSION_ID}" ]; then

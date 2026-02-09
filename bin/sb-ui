@@ -1,23 +1,6 @@
 #!/usr/bin/env bash
 
 set -euo pipefail
-# Force stdin to a real TTY inside the container.
-# Without this, stdin can look like a regular file and Python's selectors/epoll
-# will fail with: PermissionError: [Errno 1] Operation not permitted
-SCRIPT_SOURCE="${BASH_SOURCE[0]}"
-while [ -L "$SCRIPT_SOURCE" ]; do
-  LINK_DIR="$(cd "$(dirname "$SCRIPT_SOURCE")" && pwd)"
-  SCRIPT_SOURCE="$(readlink "$SCRIPT_SOURCE")"
-  [[ "$SCRIPT_SOURCE" != /* ]] && SCRIPT_SOURCE="$LINK_DIR/$SCRIPT_SOURCE"
-done
-SCRIPT_DIR="$(cd "$(dirname "$SCRIPT_SOURCE")" && pwd)"
-ROOT_DIR="$(cd "$SCRIPT_DIR/.." && pwd)"
-HOST_WRAPPER_PATH="$ROOT_DIR/dev-tools/spec-interview-ui-wrapper/scripts/codex-interview-wrapper.py"
-CONTAINER_WRAPPER_PATH="/root/.codex/dev-tools/spec-interview-ui-wrapper/scripts/codex-interview-wrapper.py"
 
-if [ ! -f "$HOST_WRAPPER_PATH" ]; then
-  echo "[sb-ui] ERROR: Wrapper not found on host: $HOST_WRAPPER_PATH" >&2
-  exit 1
-fi
-
-sb bash -lc "python3 \"$CONTAINER_WRAPPER_PATH\" --cmd \"codex --no-alt-screen\" < /dev/tty"
+# Back-compat shim: `sb-ui` now delegates to `sb ui`.
+exec sb ui "$@"
