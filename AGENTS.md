@@ -111,3 +111,10 @@
 - solution: Added `DEPLOYMENT.md` with A0-A7 acceptance template, rollout checklist, rollback steps, and operator/admin short guide; updated execution status/checkpoint to reflect T4.1 is in progress pending staging/on-prem run and stakeholder approval.
 - notes: Deterministic local checks remain available, but final task completion still requires integrated environment (NAS + proxy + SSO + seeded roles + WhatsApp credentials).
 - proof: `.venv/bin/python -m unittest discover -s tests -v && node --check app/static/app.js`
+
+- date: 2026-02-09
+- context: `docs/specs/whatsapp-frontdesk-extensions/{SPEC.md,ACCEPTANCE.md,DEPLOYMENT.md}` (local acceptance alignment)
+- problem: Local validation was running under a two-role operational scope (`agent`, `admin`), but spec/deployment acceptance text still required `supervisor` checks, creating false failures in A5/A6.
+- solution: Updated Extras spec + acceptance + deployment checklists to reflect current operational scope (`agent`/`admin`): taxonomy admin remains `admin` only, export permission/verification is `admin` with explicit `agent` denial checks.
+- notes: Repository code still contains `UserRole.SUPERVISOR` and related paths/tests; the documentation update only aligns current validation scope and does not remove supervisor support from code.
+- proof: `rg -n "supervisor|admin \\+ supervisor" docs/specs/whatsapp-frontdesk-extensions/{SPEC.md,ACCEPTANCE.md,DEPLOYMENT.md}`

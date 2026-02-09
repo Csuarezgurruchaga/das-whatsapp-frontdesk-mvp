@@ -93,13 +93,14 @@ Focus areas include attachments and tipification, plus any additional hardening 
 ### Tipification
 - Model: multiple tags per conversation.
 - Taxonomy management: admin UI (CRUD) in scope.
-- Supervisor access: read-only view of taxonomy admin UI.
+- Current operational scope uses only two roles: `agent` and `admin`.
+- Taxonomy admin is `admin` only; `agent` has no taxonomy-admin access.
 - Audit: store only current tags (no historical audit trail in scope).
 - Export: per-conversation manual export in scope as a ZIP including JSON transcript + attachments.
   - Generation: on-demand only (generated when requested).
   - Storage: `EXPORTS_DIR` (separate from `ATTACHMENTS_DIR`).
   - Serving: via reverse-proxy (same infra pattern as attachments; no app streaming).
-  - Permissions: admin + supervisor.
+  - Permissions: admin only.
   - Retention: TTL + cleanup job, configurable via `EXPORTS_TTL_DAYS` (default: 7 days).
 - Taxonomy lifecycle: allow renaming tags (migrate references); do not allow deletion (use “archived/disabled” instead).
 
@@ -142,7 +143,7 @@ None (as of 2026-01-30).
   - Rationale:
     - Avoid exposing real filesystem paths and keep authorization aligned with the app session.
     - Support common “quick view” formats in the operator UI without adding Office preview complexity.
-- 2026-01-30 — Storage layout: per-conversation folder; export ZIP generated on-demand; export retention via TTL cleanup; export permission admin+supervisor.
+- 2026-01-30 — Storage layout: per-conversation folder; export ZIP generated on-demand; export retention via TTL cleanup; export permission admin-only (current operational scope).
   - Rationale:
     - Keep NAS storage organized and make per-conversation cleanup straightforward.
     - Avoid unnecessary storage growth by generating exports only when requested.
@@ -159,7 +160,7 @@ None (as of 2026-01-30).
 - 2026-01-30 — WhatsApp constraints: “soft hardcode” constants for Meta WhatsApp Cloud API (100MB max, MIME allowlist, and per-type size caps).
   - Rationale:
     - Keep behavior consistent across deployments while making limits easy to adjust in code if Meta/provider changes.
-- 2026-01-30 — Finalized details: attachments immutable; NAS naming uses `attachment_id + safe(truncate(original_filename))`; MIME fallback by extension for empty/octet-stream; export TTL configurable via `EXPORTS_TTL_DAYS` (default 7); supervisors read-only in taxonomy admin; hard delete writes minimal deletion event.
+- 2026-01-30 — Finalized details: attachments immutable; NAS naming uses `attachment_id + safe(truncate(original_filename))`; MIME fallback by extension for empty/octet-stream; export TTL configurable via `EXPORTS_TTL_DAYS` (default 7); taxonomy admin is admin-only in the current two-role scope (`agent`/`admin`); hard delete writes minimal deletion event.
   - Rationale:
     - Improve interoperability with real-world browser MIME behavior while staying allowlist-driven.
     - Keep governance and auditability without retaining PII in deletion logs.
@@ -171,7 +172,7 @@ None (as of 2026-01-30).
     - Keep storage references stable (immutable) and simplify retry/idempotency behavior.
     - Preserve usability in file shares while avoiding filesystem/path injection risk.
     - Prevent predictable send failures by enforcing per-type caps pre-upload.
-- 2026-01-30 — Exports: ZIP generated on-demand only; stored under `EXPORTS_DIR`; served via reverse-proxy; export permission is admin+supervisor; export retention uses TTL cleanup (default 7 days); hard delete action lives in conversation details.
+- 2026-01-30 — Exports: ZIP generated on-demand only; stored under `EXPORTS_DIR`; served via reverse-proxy; export permission is admin-only in the current two-role scope (`agent`/`admin`); export retention uses TTL cleanup (default 7 days); hard delete action lives in conversation details.
   - Rationale:
     - Generate exports only when needed to control storage growth.
     - Separate exports from attachments for quota/permissions management.

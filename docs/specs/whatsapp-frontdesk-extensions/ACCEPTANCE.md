@@ -27,11 +27,12 @@
 
 ## A5 — Taxonomy admin UI: roles and lifecycle
 - `admin` can create/edit/rename/archive tags in the taxonomy admin UI.
-- `supervisor` can view the taxonomy admin UI in read-only mode.
+- `agent` cannot manage taxonomy admin (taxonomy admin is restricted to `admin`).
 - Tag rename migrates references; deletion is not allowed (archive/disable instead).
 
 ## A6 — Export ZIP: on-demand, permissions, retention
-- `admin` and `supervisor` can request an on-demand export ZIP per conversation.
+- `admin` can request an on-demand export ZIP per conversation.
+- `agent` cannot request/export ZIPs.
 - Export ZIP contains JSON transcript + attachments and is stored under `EXPORTS_DIR`.
 - Export ZIP is served via reverse-proxy after backend authorization (same pattern as attachments).
 - Exports expire and are cleaned up using `EXPORTS_TTL_DAYS` (default 7).
