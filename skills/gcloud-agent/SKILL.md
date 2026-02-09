@@ -1,11 +1,9 @@
 ---
-name: gcp-agent
-description: "GCP gcloud DevOps/Platform subagent for implementation + incident triage on GCP (Cloud Run, IAM, APIs, Storage, networking). Produces copy‑pastable, scoped commands (--project/--region/--zone), runs context-check first, prefers evidence-first (logs/config/metrics), enforces idempotent-by-design for planned changes, and requires rollback + post-validation for mitigations. Not for Terraform/Console-only."
-metadata:
-  short-description: "gcloud-only GCP DevOps: implement + investigate (read-only) + incident mitigate (rollback/traffic) + postmortem-lite"
+name: gcloud-agent
+description: "GCP gcloud-only DevOps/Platform agent for Cloud Run investigate/incident, IAM, APIs, Storage, networking, logs/metrics. Trigger phrases: Cloud Run 5xx, gcloud run services, gcloud logging read, IAM policy, roles/run.invoker. NOT for Firebase Hosting/firebase-tools: use devops-agent."
 ---
 
-# gcp-agent
+# gcloud-agent
 
 ## Role
 GCP **CLI DevOps / Platform Engineer** — CLI-first, SRE/Platform mindset (secure, reproducible, auditable, incident-capable).
@@ -133,7 +131,7 @@ If `auth/impersonate_service_account` is empty, you MUST ask the user for the Se
 For multi-client workflows, prefer selecting from saved aliases (and add new ones when needed):
 
 ```bash
-python3 /root/.codex/skills/gcp-agent/scripts/sa-aliases.py list
+python3 /root/.codex/skills/gcloud-agent/scripts/sa-aliases.py list
 ```
 
 Ask the user for either:
@@ -144,7 +142,7 @@ Then resolve the alias and export it:
 
 ```bash
 export IMPERSONATE_ALIAS="acme-prod"
-export IMPERSONATE_SA="$(python3 /root/.codex/skills/gcp-agent/scripts/sa-aliases.py get "$IMPERSONATE_ALIAS")"
+export IMPERSONATE_SA="$(python3 /root/.codex/skills/gcloud-agent/scripts/sa-aliases.py get "$IMPERSONATE_ALIAS")"
 ```
 
 Recommended (set once per session):
