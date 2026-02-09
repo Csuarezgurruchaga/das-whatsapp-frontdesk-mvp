@@ -544,8 +544,7 @@ docker run "${DOCKER_ARGS[@]}" \
 
     trap cleanup_mcp EXIT INT TERM
 
-    "$@" &
-    CODEX_PID=$!
-    wait "$CODEX_PID"
-    exit "$?"
+    "$@"
+    exit_code="$?"
+    exit "$exit_code"
   ' -- "${CMD[@]}"
