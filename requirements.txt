@@ -1,5 +1,6 @@
 alembic
 fastapi
+python-multipart
 PyMySQL
 PyYAML
 SQLAlchemy

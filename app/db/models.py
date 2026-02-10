@@ -2,6 +2,7 @@ import enum
 
 from sqlalchemy import (
     BigInteger,
+    Boolean,
     CheckConstraint,
     DateTime,
     Enum,
@@ -24,6 +25,7 @@ def _enum_values(enum_cls: type[enum.Enum]) -> list[str]:
 class UserRole(enum.Enum):
     AGENT = "agent"
     ADMIN = "admin"
+    SUPERVISOR = "supervisor"
 
 
 class ConversationState(enum.Enum):
@@ -57,6 +59,12 @@ class MessageReceiptStatus(enum.Enum):
     SENT = "sent"
     DELIVERED = "delivered"
     READ = "read"
+    FAILED = "failed"
+
+
+class AttachmentStatus(enum.Enum):
+    UPLOADING = "uploading"
+    SENT = "sent"
     FAILED = "failed"
 
 
@@ -177,6 +185,37 @@ class Message(Base):
     conversation = relationship("Conversation")
 
 
+class AttachmentMetadata(Base):
+    __tablename__ = "attachment_metadata"
+    __table_args__ = (
+        UniqueConstraint("attachment_id", name="uq_attachment_metadata_attachment_id"),
+        Index("ix_attachment_metadata_conversation_id", "conversation_id"),
+        Index("ix_attachment_metadata_message_id", "message_id"),
+    )
+
+    id: Mapped[int] = mapped_column(BigInteger, primary_key=True)
+    conversation_id: Mapped[int] = mapped_column(
+        ForeignKey("conversations.id"), nullable=False
+    )
+    message_id: Mapped[int | None] = mapped_column(ForeignKey("messages.id"))
+    attachment_id: Mapped[str] = mapped_column(String(64), nullable=False)
+    original_filename: Mapped[str] = mapped_column(String(255), nullable=False)
+    mime: Mapped[str] = mapped_column(String(255), nullable=False)
+    size_bytes: Mapped[int] = mapped_column(BigInteger, nullable=False)
+    storage_relpath: Mapped[str] = mapped_column(String(1024), nullable=False)
+    status: Mapped[AttachmentStatus] = mapped_column(
+        Enum(AttachmentStatus, name="attachment_status"), nullable=False
+    )
+    created_by: Mapped[int] = mapped_column(ForeignKey("users.id"), nullable=False)
+    created_at: Mapped[object] = mapped_column(
+        DateTime(timezone=True), server_default=func.now(), nullable=False
+    )
+
+    conversation = relationship("Conversation")
+    message = relationship("Message")
+    created_by_user = relationship("User")
+
+
 class ConversationEvent(Base):
     __tablename__ = "conversation_events"
     __table_args__ = (
@@ -197,6 +236,70 @@ class ConversationEvent(Base):
 
     conversation = relationship("Conversation")
     actor_user = relationship("User")
+
+
+class ConversationDeletionEvent(Base):
+    __tablename__ = "conversation_deletion_events"
+    __table_args__ = (
+        Index("ix_conversation_deletion_events_conversation_id", "conversation_id"),
+        Index("ix_conversation_deletion_events_created_at", "created_at"),
+    )
+
+    id: Mapped[int] = mapped_column(BigInteger, primary_key=True)
+    conversation_id: Mapped[int] = mapped_column(BigInteger, nullable=False)
+    actor_user_id: Mapped[int] = mapped_column(ForeignKey("users.id"), nullable=False)
+    reason: Mapped[str | None] = mapped_column(Text)
+    created_at: Mapped[object] = mapped_column(
+        DateTime(timezone=True), server_default=func.now(), nullable=False
+    )
+
+    actor_user = relationship("User")
+
+
+class TaxonomyTag(Base):
+    __tablename__ = "taxonomy_tags"
+    __table_args__ = (
+        UniqueConstraint("name", name="uq_taxonomy_tags_name"),
+        Index("ix_taxonomy_tags_is_archived", "is_archived"),
+    )
+
+    id: Mapped[int] = mapped_column(BigInteger, primary_key=True)
+    name: Mapped[str] = mapped_column(String(120), nullable=False)
+    is_archived: Mapped[bool] = mapped_column(
+        Boolean,
+        nullable=False,
+        default=False,
+    )
+    created_by: Mapped[int] = mapped_column(ForeignKey("users.id"), nullable=False)
+    created_at: Mapped[object] = mapped_column(
+        DateTime(timezone=True), server_default=func.now(), nullable=False
+    )
+    updated_at: Mapped[object] = mapped_column(
+        DateTime(timezone=True), server_default=func.now(), nullable=False
+    )
+
+    created_by_user = relationship("User")
+
+
+class ConversationTag(Base):
+    __tablename__ = "conversation_tags"
+    __table_args__ = (
+        Index("ix_conversation_tags_conversation_id", "conversation_id"),
+        Index("ix_conversation_tags_tag_id", "tag_id"),
+    )
+
+    conversation_id: Mapped[int] = mapped_column(
+        ForeignKey("conversations.id"), primary_key=True
+    )
+    tag_id: Mapped[int] = mapped_column(ForeignKey("taxonomy_tags.id"), primary_key=True)
+    assigned_by: Mapped[int] = mapped_column(ForeignKey("users.id"), nullable=False)
+    assigned_at: Mapped[object] = mapped_column(
+        DateTime(timezone=True), server_default=func.now(), nullable=False
+    )
+
+    conversation = relationship("Conversation")
+    tag = relationship("TaxonomyTag")
+    assigned_by_user = relationship("User")
 
 
 class MessageReceipt(Base):

@@ -67,6 +67,13 @@ def _serialize_datetime(value: datetime | None) -> str | None:
     return value.astimezone(timezone.utc).isoformat()
 
 
+def _coerce_utc(value: datetime) -> datetime:
+    if value.tzinfo is None:
+        # Keep websocket auth consistent with HTTP auth on SQLite.
+        return value.replace(tzinfo=timezone.utc)
+    return value.astimezone(timezone.utc)
+
+
 def dispatch_event(payload: dict, recipient_filter: RecipientFilter | None = None) -> None:
     try:
         loop = asyncio.get_running_loop()
@@ -88,6 +95,7 @@ def build_message_event(
     created_at: datetime | None,
     conversation_state: ConversationState,
     assigned_to: int | None,
+    attachment: dict | None = None,
 ) -> dict:
     return {
         "type": "message.new",
@@ -101,6 +109,7 @@ def build_message_event(
             "created_at": _serialize_datetime(created_at),
             "conversation_state": conversation_state.value,
             "assigned_to": assigned_to,
+            "attachment": attachment,
         },
     }
 
@@ -189,10 +198,7 @@ def get_current_user_for_websocket(websocket: WebSocket, db: Session) -> User:
         raise WebSocketAuthError("Not authenticated")
 
     now = datetime.now(timezone.utc)
-    expires_at = user_session.expires_at
-    if expires_at.tzinfo is None:
-        expires_at = expires_at.replace(tzinfo=timezone.utc)
-    if expires_at <= now:
+    if _coerce_utc(user_session.expires_at) <= now:
         crud.revoke_user_session(db, user_session, revoked_at=now)
         db.commit()
         raise WebSocketAuthError("Not authenticated")

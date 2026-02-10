@@ -15,12 +15,31 @@ _REQUIRED_ENV_VARS = (
     "WHATSAPP_ACCESS_TOKEN",
     "WHATSAPP_PHONE_NUMBER_ID",
 )
+_DEFAULT_ATTACHMENTS_DIR = "./storage/attachments"
+_DEFAULT_EXPORTS_DIR = "./storage/exports"
+_DEFAULT_EXPORTS_TTL_DAYS = 7
 
 
 @dataclass(frozen=True)
 class AllowlistConfig:
     enabled: bool
     networks: tuple[ipaddress._BaseNetwork, ...]
+
+
+@dataclass(frozen=True)
+class ExtrasFeatureFlags:
+    attachments_enabled: bool
+    exports_enabled: bool
+    hard_delete_enabled: bool
+    taxonomy_admin_enabled: bool
+
+
+@dataclass(frozen=True)
+class ExtrasConfig:
+    attachments_dir: str
+    exports_dir: str
+    exports_ttl_days: int
+    features: ExtrasFeatureFlags
 
 
 def _is_truthy(value: str | None) -> bool:
@@ -59,6 +78,45 @@ def get_allowlist_config() -> AllowlistConfig:
     return AllowlistConfig(enabled=enabled, networks=tuple(networks))
 
 
+def _read_non_empty_path(env_name: str, default: str) -> str:
+    value = (os.getenv(env_name, default) or "").strip()
+    if not value:
+        raise RuntimeError(f"{env_name} must not be empty")
+    return value
+
+
+def _read_positive_int(env_name: str, default: int) -> int:
+    raw_value = (os.getenv(env_name) or str(default)).strip()
+    try:
+        parsed = int(raw_value)
+    except ValueError as exc:
+        raise RuntimeError(f"{env_name} must be a positive integer") from exc
+    if parsed <= 0:
+        raise RuntimeError(f"{env_name} must be greater than 0")
+    return parsed
+
+
+@lru_cache
+def get_extras_config() -> ExtrasConfig:
+    return ExtrasConfig(
+        attachments_dir=_read_non_empty_path(
+            "ATTACHMENTS_DIR", _DEFAULT_ATTACHMENTS_DIR
+        ),
+        exports_dir=_read_non_empty_path("EXPORTS_DIR", _DEFAULT_EXPORTS_DIR),
+        exports_ttl_days=_read_positive_int(
+            "EXPORTS_TTL_DAYS", _DEFAULT_EXPORTS_TTL_DAYS
+        ),
+        features=ExtrasFeatureFlags(
+            attachments_enabled=_is_truthy(os.getenv("FEATURE_ATTACHMENTS_ENABLED")),
+            exports_enabled=_is_truthy(os.getenv("FEATURE_EXPORTS_ENABLED")),
+            hard_delete_enabled=_is_truthy(os.getenv("FEATURE_HARD_DELETE_ENABLED")),
+            taxonomy_admin_enabled=_is_truthy(
+                os.getenv("FEATURE_TAXONOMY_ADMIN_ENABLED")
+            ),
+        ),
+    )
+
+
 def validate_runtime_config() -> None:
     env = get_app_env()
     if env not in _VALID_APP_ENVS:
@@ -71,3 +129,4 @@ def validate_runtime_config() -> None:
             raise RuntimeError(f"Missing required environment variables: {missing_list}")
 
     get_allowlist_config()
+    get_extras_config()

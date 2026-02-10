@@ -50,6 +50,7 @@
           </div>
           <div class="user-panel">
             <div class="user-chip" id="user-chip">Usuario</div>
+            <button class="ghost hidden" id="taxonomy-btn" type="button">Taxonomia</button>
             <button class="ghost" id="logout-btn">Salir</button>
           </div>
         </header>
@@ -82,6 +83,16 @@
                 <button class="chip" data-template="Mensaje sin respuesta">Mensaje sin respuesta</button>
               </div>
               <div class="composer-row">
+                <button
+                  class="ghost attach-btn"
+                  id="attach-btn"
+                  type="button"
+                  aria-label="Adjuntar archivo"
+                  title="Adjuntar archivo"
+                >
+                  📎
+                </button>
+                <input id="attachment-input" class="attachment-input" type="file" />
                 <textarea id="message-input" placeholder="Escribe un mensaje" rows="2"></textarea>
                 <button class="primary" id="send-btn">Enviar</button>
               </div>
@@ -99,6 +110,52 @@
           </aside>
         </div>
       </section>
+    </div>
+
+    <div
+      class="attachment-modal hidden"
+      id="attachment-modal"
+      role="dialog"
+      aria-modal="true"
+      aria-labelledby="attachment-modal-title"
+    >
+      <div class="attachment-modal-card">
+        <div class="attachment-modal-header">
+          <h2 id="attachment-modal-title">Vista previa</h2>
+          <button class="ghost" id="attachment-modal-close" type="button">Cerrar</button>
+        </div>
+        <iframe
+          id="attachment-preview-frame"
+          title="Vista previa de adjunto"
+          loading="lazy"
+        ></iframe>
+      </div>
+    </div>
+
+    <div
+      class="taxonomy-modal hidden"
+      id="taxonomy-modal"
+      role="dialog"
+      aria-modal="true"
+      aria-labelledby="taxonomy-modal-title"
+    >
+      <div class="taxonomy-modal-card">
+        <div class="taxonomy-modal-header">
+          <h2 id="taxonomy-modal-title">Taxonomia</h2>
+          <button class="ghost" id="taxonomy-modal-close" type="button">Cerrar</button>
+        </div>
+        <p class="helper taxonomy-helper" id="taxonomy-error" role="status"></p>
+        <form id="taxonomy-create-form" class="taxonomy-create hidden">
+          <input
+            id="taxonomy-create-input"
+            type="text"
+            maxlength="64"
+            placeholder="Nueva etiqueta"
+          />
+          <button class="primary" type="submit">Crear etiqueta</button>
+        </form>
+        <div class="taxonomy-list" id="taxonomy-list"></div>
+      </div>
     </div>
 
     <script src="/static/app.js"></script>

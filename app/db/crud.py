@@ -2,12 +2,16 @@ from __future__ import annotations
 
 from datetime import datetime, timezone
 
-from sqlalchemy import func, select, update
+from sqlalchemy import delete, func, select, update
 from sqlalchemy.orm import Session
 
 from .models import (
+    AttachmentMetadata,
+    AttachmentStatus,
     Contact,
     Conversation,
+    ConversationDeletionEvent,
+    ConversationTag,
     ConversationReadState,
     ConversationState,
     ConversationEvent,
@@ -17,7 +21,9 @@ from .models import (
     MessageReceipt,
     MessageReceiptStatus,
     SenderType,
+    TaxonomyTag,
     User,
+    UserRole,
     UserSession,
 )
 
@@ -317,6 +323,50 @@ def list_conversation_events(
     return list(session.scalars(stmt))
 
 
+def create_conversation_deletion_event(
+    session: Session,
+    *,
+    conversation_id: int,
+    actor_user_id: int,
+    reason: str | None = None,
+    created_at: datetime | None = None,
+) -> ConversationDeletionEvent:
+    bind = session.get_bind()
+    if bind.dialect.name == "sqlite":
+        next_id_stmt = select(func.coalesce(func.max(ConversationDeletionEvent.id), 0))
+        next_id = int(session.scalar(next_id_stmt) or 0) + 1
+    else:
+        next_id = None
+
+    event = ConversationDeletionEvent(
+        id=next_id,
+        conversation_id=conversation_id,
+        actor_user_id=actor_user_id,
+        reason=reason,
+    )
+    if created_at is not None:
+        event.created_at = created_at
+    session.add(event)
+    return event
+
+
+def list_conversation_deletion_events(
+    session: Session,
+    *,
+    conversation_id: int,
+    limit: int = 100,
+    offset: int = 0,
+) -> list[ConversationDeletionEvent]:
+    stmt = (
+        select(ConversationDeletionEvent)
+        .where(ConversationDeletionEvent.conversation_id == conversation_id)
+        .order_by(ConversationDeletionEvent.created_at.desc())
+        .limit(limit)
+        .offset(offset)
+    )
+    return list(session.scalars(stmt))
+
+
 def create_message_receipt(
     session: Session,
     *,
@@ -371,6 +421,221 @@ def list_message_receipts_by_whatsapp_message_id(
         .offset(offset)
     )
     return list(session.scalars(stmt))
+
+
+def create_attachment_metadata(
+    session: Session,
+    *,
+    conversation_id: int,
+    message_id: int | None,
+    attachment_id: str,
+    original_filename: str,
+    mime: str,
+    size_bytes: int,
+    storage_relpath: str,
+    status: AttachmentStatus,
+    created_by: int,
+) -> AttachmentMetadata:
+    attachment = AttachmentMetadata(
+        conversation_id=conversation_id,
+        message_id=message_id,
+        attachment_id=attachment_id,
+        original_filename=original_filename,
+        mime=mime,
+        size_bytes=size_bytes,
+        storage_relpath=storage_relpath,
+        status=status,
+        created_by=created_by,
+    )
+    session.add(attachment)
+    return attachment
+
+
+def get_attachment_by_attachment_id(
+    session: Session,
+    *,
+    attachment_id: str,
+) -> AttachmentMetadata | None:
+    stmt = (
+        select(AttachmentMetadata)
+        .where(AttachmentMetadata.attachment_id == attachment_id)
+        .limit(1)
+    )
+    return session.scalar(stmt)
+
+
+def list_attachments_by_conversation(
+    session: Session,
+    *,
+    conversation_id: int,
+    limit: int = 200,
+    offset: int = 0,
+) -> list[AttachmentMetadata]:
+    stmt = (
+        select(AttachmentMetadata)
+        .where(AttachmentMetadata.conversation_id == conversation_id)
+        .order_by(AttachmentMetadata.created_at.asc())
+        .limit(limit)
+        .offset(offset)
+    )
+    return list(session.scalars(stmt))
+
+
+def get_or_create_attachment_metadata(
+    session: Session,
+    *,
+    conversation_id: int,
+    message_id: int | None,
+    attachment_id: str,
+    original_filename: str,
+    mime: str,
+    size_bytes: int,
+    storage_relpath: str,
+    status: AttachmentStatus,
+    created_by: int,
+) -> AttachmentMetadata:
+    existing = get_attachment_by_attachment_id(session, attachment_id=attachment_id)
+    if existing is not None:
+        return existing
+
+    return create_attachment_metadata(
+        session,
+        conversation_id=conversation_id,
+        message_id=message_id,
+        attachment_id=attachment_id,
+        original_filename=original_filename,
+        mime=mime,
+        size_bytes=size_bytes,
+        storage_relpath=storage_relpath,
+        status=status,
+        created_by=created_by,
+    )
+
+
+def list_taxonomy_tags(
+    session: Session,
+    *,
+    include_archived: bool = True,
+) -> list[TaxonomyTag]:
+    stmt = select(TaxonomyTag).order_by(TaxonomyTag.name.asc())
+    if not include_archived:
+        stmt = stmt.where(TaxonomyTag.is_archived.is_(False))
+    return list(session.scalars(stmt))
+
+
+def list_taxonomy_tags_by_ids(
+    session: Session,
+    *,
+    tag_ids: list[int],
+) -> list[TaxonomyTag]:
+    if not tag_ids:
+        return []
+    stmt = (
+        select(TaxonomyTag)
+        .where(TaxonomyTag.id.in_(tag_ids))
+        .order_by(TaxonomyTag.name.asc())
+    )
+    return list(session.scalars(stmt))
+
+
+def get_taxonomy_tag(
+    session: Session,
+    *,
+    tag_id: int,
+) -> TaxonomyTag | None:
+    return session.get(TaxonomyTag, tag_id)
+
+
+def get_taxonomy_tag_by_name(
+    session: Session,
+    *,
+    name: str,
+) -> TaxonomyTag | None:
+    normalized = name.strip().lower()
+    if not normalized:
+        return None
+    stmt = (
+        select(TaxonomyTag)
+        .where(func.lower(TaxonomyTag.name) == normalized)
+        .limit(1)
+    )
+    return session.scalar(stmt)
+
+
+def create_taxonomy_tag(
+    session: Session,
+    *,
+    name: str,
+    created_by: int,
+) -> TaxonomyTag:
+    bind = session.get_bind()
+    if bind.dialect.name == "sqlite":
+        next_id_stmt = select(func.coalesce(func.max(TaxonomyTag.id), 0))
+        next_id = int(session.scalar(next_id_stmt) or 0) + 1
+    else:
+        next_id = None
+    tag = TaxonomyTag(
+        id=next_id,
+        name=name,
+        is_archived=False,
+        created_by=created_by,
+    )
+    session.add(tag)
+    return tag
+
+
+def update_taxonomy_tag(
+    tag: TaxonomyTag,
+    *,
+    name: str | None = None,
+    is_archived: bool | None = None,
+    now: datetime | None = None,
+) -> TaxonomyTag:
+    if name is not None:
+        tag.name = name
+    if is_archived is not None:
+        tag.is_archived = is_archived
+    tag.updated_at = now or datetime.now(timezone.utc)
+    return tag
+
+
+def list_conversation_tags(
+    session: Session,
+    *,
+    conversation_id: int,
+) -> list[TaxonomyTag]:
+    stmt = (
+        select(TaxonomyTag)
+        .join(ConversationTag, ConversationTag.tag_id == TaxonomyTag.id)
+        .where(ConversationTag.conversation_id == conversation_id)
+        .order_by(TaxonomyTag.name.asc())
+    )
+    return list(session.scalars(stmt))
+
+
+def set_conversation_tags(
+    session: Session,
+    *,
+    conversation_id: int,
+    tag_ids: list[int],
+    assigned_by: int,
+    assigned_at: datetime | None = None,
+) -> list[TaxonomyTag]:
+    deduped_tag_ids = list(dict.fromkeys(tag_ids))
+    session.execute(
+        delete(ConversationTag).where(ConversationTag.conversation_id == conversation_id)
+    )
+    when = assigned_at or datetime.now(timezone.utc)
+    for tag_id in deduped_tag_ids:
+        session.add(
+            ConversationTag(
+                conversation_id=conversation_id,
+                tag_id=tag_id,
+                assigned_by=assigned_by,
+                assigned_at=when,
+            )
+        )
+    return list_conversation_tags(session, conversation_id=conversation_id)
 
 
 def get_user_by_username(session: Session, *, username: str) -> User | None:
