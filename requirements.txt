@@ -3,3 +3,4 @@ fastapi
 PyMySQL
 PyYAML
 SQLAlchemy
+uvicorn[standard]

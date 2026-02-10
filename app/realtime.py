@@ -189,7 +189,10 @@ def get_current_user_for_websocket(websocket: WebSocket, db: Session) -> User:
         raise WebSocketAuthError("Not authenticated")
 
     now = datetime.now(timezone.utc)
-    if user_session.expires_at <= now:
+    expires_at = user_session.expires_at
+    if expires_at.tzinfo is None:
+        expires_at = expires_at.replace(tzinfo=timezone.utc)
+    if expires_at <= now:
         crud.revoke_user_session(db, user_session, revoked_at=now)
         db.commit()
         raise WebSocketAuthError("Not authenticated")

@@ -31,6 +31,7 @@ from app.realtime import (
     make_recipient_filter_for_conversation_update,
     make_recipient_filter_for_message,
 )
+from app.datetime_utils import ensure_datetime_utc
 from app.whatsapp import send_outbound_text
 
 router = APIRouter()
@@ -134,7 +135,7 @@ def list_conversations(
                 assigned_to=conversation.assigned_to,
                 contact_number=contact.whatsapp_number if contact else "",
                 contact_name=contact.display_name if contact else None,
-                last_activity_at=conversation.last_activity_at,
+                last_activity_at=ensure_datetime_utc(conversation.last_activity_at),
                 last_message_text=last_message.text if last_message else None,
                 unread_count=unread_count,
             )
@@ -162,8 +163,8 @@ def get_conversation_detail(
         assigned_to_username=assigned_user.username if assigned_user else None,
         contact_number=contact.whatsapp_number if contact else "",
         contact_name=contact.display_name if contact else None,
-        last_activity_at=conversation.last_activity_at,
-        closed_at=conversation.closed_at,
+        last_activity_at=ensure_datetime_utc(conversation.last_activity_at),
+        closed_at=ensure_datetime_utc(conversation.closed_at),
         closed_by=conversation.closed_by,
         previous_conversation_id=conversation.previous_conversation_id,
     )
@@ -198,7 +199,7 @@ def list_messages(
             direction=message.direction.value,
             sender_type=message.sender_type.value,
             text=message.text,
-            created_at=message.created_at,
+            created_at=ensure_datetime_utc(message.created_at),
         )
         for message in messages
     ]

@@ -17,6 +17,10 @@ from sqlalchemy.orm import Mapped, mapped_column, relationship
 from .base import Base
 
 
+def _enum_values(enum_cls: type[enum.Enum]) -> list[str]:
+    return [member.value for member in enum_cls]  # type: ignore[attr-defined]
+
+
 class UserRole(enum.Enum):
     AGENT = "agent"
     ADMIN = "admin"
@@ -62,7 +66,10 @@ class User(Base):
     id: Mapped[int] = mapped_column(BigInteger, primary_key=True)
     username: Mapped[str] = mapped_column(String(255), nullable=False, unique=True)
     password_hash: Mapped[str] = mapped_column(String(255), nullable=False)
-    role: Mapped[UserRole] = mapped_column(Enum(UserRole, name="user_role"), nullable=False)
+    role: Mapped[UserRole] = mapped_column(
+        Enum(UserRole, name="user_role", values_callable=_enum_values),
+        nullable=False,
+    )
     created_at: Mapped[object] = mapped_column(
         DateTime(timezone=True), server_default=func.now(), nullable=False
     )
@@ -208,7 +215,12 @@ class MessageReceipt(Base):
     message_id: Mapped[int | None] = mapped_column(ForeignKey("messages.id"))
     whatsapp_message_id: Mapped[str | None] = mapped_column(String(255))
     status: Mapped[MessageReceiptStatus] = mapped_column(
-        Enum(MessageReceiptStatus, name="message_receipt_status"), nullable=False
+        Enum(
+            MessageReceiptStatus,
+            name="message_receipt_status",
+            values_callable=_enum_values,
+        ),
+        nullable=False,
     )
     payload_raw: Mapped[str | None] = mapped_column(Text)
     created_at: Mapped[object] = mapped_column(
