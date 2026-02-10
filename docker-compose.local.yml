@@ -1,0 +1,46 @@
+services:
+  mysql:
+    image: mysql:8
+    environment:
+      MYSQL_DATABASE: frontdesk
+      MYSQL_USER: wfd
+      MYSQL_PASSWORD: wfdpass
+      MYSQL_ROOT_PASSWORD: rootpass
+    command:
+      - mysqld
+      - --character-set-server=utf8mb4
+      - --collation-server=utf8mb4_0900_ai_ci
+    ports:
+      - "3306:3306"
+    volumes:
+      - mysql_data:/var/lib/mysql
+
+  app:
+    build:
+      context: .
+      dockerfile: Dockerfile.local
+    env_file:
+      - .env.staging.local
+    depends_on:
+      - mysql
+    volumes:
+      - .:/app
+      - ./storage/attachments:/data/attachments
+      - ./storage/exports:/data/exports
+    command: ["uvicorn", "app.main:app", "--host", "0.0.0.0", "--port", "8000"]
+    ports:
+      - "8000:8000"
+
+  nginx:
+    image: nginx:alpine
+    depends_on:
+      - app
+    ports:
+      - "8080:8080"
+    volumes:
+      - ./nginx.local.conf:/etc/nginx/nginx.conf:ro
+      - ./storage/attachments:/data/attachments:ro
+      - ./storage/exports:/data/exports:ro
+
+volumes:
+  mysql_data: {}

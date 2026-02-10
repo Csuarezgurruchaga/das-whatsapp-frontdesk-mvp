@@ -1,0 +1,17 @@
+.DS_Store
+.Rhistory
+
+.venv/
+__pycache__/
+*.pyc
+
+# Local runtime artifacts
+storage/
+.runtime/
+
+# Local env files (use *.example templates instead)
+.env.staging.local
+.env.*.local
+
+# Local helper scripts (do not commit tokens)
+scripts/git-http.sh
