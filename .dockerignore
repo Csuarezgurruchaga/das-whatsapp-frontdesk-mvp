@@ -1,0 +1,24 @@
+.git
+.git/
+**/.git
+**/.git/
+.DS_Store
+.Rhistory
+
+# Python virtualenv / caches
+.venv/
+__pycache__/
+*.pyc
+
+# Local runtime artifacts (bind mounts)
+storage/
+.runtime/
+
+# Local env files (Compose reads these from host; they don't need to be in the image)
+.env
+.env.*
+
+# Large local artifacts / docs not needed in the image
+PRD.md
+UI-adjunto.png
+das-decision-tree.yaml

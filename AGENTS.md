@@ -143,3 +143,41 @@
 - solution: Updated Extras spec + acceptance + deployment checklists to reflect current operational scope (`agent`/`admin`): taxonomy admin remains `admin` only, export permission/verification is `admin` with explicit `agent` denial checks.
 - notes: Repository code still contains `UserRole.SUPERVISOR` and related paths/tests; the documentation update only aligns current validation scope and does not remove supervisor support from code.
 - proof: `rg -n "supervisor|admin \\+ supervisor" docs/specs/whatsapp-frontdesk-extensions/{SPEC.md,ACCEPTANCE.md,DEPLOYMENT.md}`
+
+-
+- date: 2026-02-10
+- context: production deployment (Debian) planning
+- problem: After completing the local "prod-like" acceptance run (Docker Desktop + ngrok + real WhatsApp webhook + Nginx X-Accel-Redirect), we want a reproducible production deploy flow on a Debian server, but key environment decisions are still pending.
+- solution: Logged open questions and the target deploy deliverables to prepare once the acceptance run passes.
+- open_questions:
+  - DB: Will MySQL run on the same Debian host (container) or is there an external/managed MySQL already?
+  - Storage: Where do `ATTACHMENTS_DIR` and `EXPORTS_DIR` live in prod (local disk vs NAS), and what are the exact mount paths?
+  - TLS: Where is TLS terminated (on-host Nginx/Let's Encrypt vs upstream LB/proxy), and what is the public domain?
+- target_deliverables (post-acceptance):
+  - `docker-compose.prod.yml` using an immutable app image tag, env/secrets outside git, and persistent volumes/mounts for DB and storage.
+  - `nginx.prod.conf` (TLS + WS upgrades + reverse proxy headers + X-Accel-Redirect internal locations).
+  - `DEPLOYMENT_PROD.md` runbook: deploy, migrate, rollback, backups, and webhook troubleshooting.
+- notes:
+  - Preferred approach: build/push a versioned app image (CI), deploy via `docker compose pull && up -d`, run `alembic upgrade head` as a one-shot step, keep state out of the image.
+  - Must preserve `Secure` cookies and signature enforcement: prod requires HTTPS and correct `X-Forwarded-*` headers.
+
+-
+- date: 2026-02-10
+- context: local prod-like compose (MySQL 8 + PyMySQL + Alembic)
+- problem: `alembic upgrade head` failed with `RuntimeError: 'cryptography' package is required for sha256_password or caching_sha2_password auth methods` when connecting to MySQL 8 using PyMySQL (default auth plugin is commonly `caching_sha2_password`).
+- solution: Added `cryptography` to `requirements.txt` so the `app` container can authenticate to MySQL 8 and run migrations.
+- proof: Rebuild `app` image and re-run `docker compose -f docker-compose.local.yml exec app alembic upgrade head` (should connect and apply migrations).
+
+-
+- date: 2026-02-10
+- context: local prod-like acceptance (handoff schedule)
+- problem: Acceptance run requires validating `EN_ESPERA`/handoff flows, but the production handoff window (Mon-Fri 09:00-18:00 America/Argentina/Buenos_Aires) can block testing outside business hours.
+- solution: Temporarily widened `handoff_schedule` in `config/bot.yaml` to `00:00-23:59` for the local acceptance run, with a plan to revert after finishing A0-A7.
+- proof: Call `POST /bot/reload` as admin and verify selecting option `6` transitions the conversation to `EN_ESPERA`.
+
+-
+- date: 2026-02-11
+- context: local prod-like acceptance (MySQL enum + exports/attachments)
+- problem: Export generation failed in MySQL with `LookupError: 'sent' is not among the defined enum values` due to an enum mapping mismatch for `attachment_status`.
+- solution: Updated `AttachmentMetadata.status` enum mapping to use `.value` strings (`uploading/sent/failed`) and added a regression unit test.
+- proof: `docker compose -f docker-compose.local.yml exec app python -c "... generate_conversation_export_zip(...)"` succeeds; `python -m unittest -v tests/test_enum_mappings.py`

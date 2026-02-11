@@ -204,7 +204,12 @@ class AttachmentMetadata(Base):
     size_bytes: Mapped[int] = mapped_column(BigInteger, nullable=False)
     storage_relpath: Mapped[str] = mapped_column(String(1024), nullable=False)
     status: Mapped[AttachmentStatus] = mapped_column(
-        Enum(AttachmentStatus, name="attachment_status"), nullable=False
+        Enum(
+            AttachmentStatus,
+            name="attachment_status",
+            values_callable=_enum_values,
+        ),
+        nullable=False,
     )
     created_by: Mapped[int] = mapped_column(ForeignKey("users.id"), nullable=False)
     created_at: Mapped[object] = mapped_column(
