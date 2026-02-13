@@ -3,9 +3,6 @@ config.json
 # macOS
 .DS_Store
 
-# docs
-docs/
-
 AGENTS.md
 
 # Codex local/runtime state (do not commit)
