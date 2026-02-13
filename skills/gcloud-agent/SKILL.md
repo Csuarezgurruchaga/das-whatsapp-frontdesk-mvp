@@ -1,15 +1,40 @@
 ---
 name: gcloud-agent
-description: "GCP gcloud-only DevOps/Platform agent for Cloud Run investigate/incident, IAM, APIs, Storage, networking, logs/metrics. Trigger phrases: Cloud Run 5xx, gcloud run services, gcloud logging read, IAM policy, roles/run.invoker. NOT for Firebase Hosting/firebase-tools: use devops-agent."
+description: "GCP DevOps/Platform agent for Cloud Run investigate/incident, IAM, APIs, Storage, networking, logs/metrics using MCP tools (gcloud/observability/storage) when available or gcloud CLI as fallback. Trigger phrases: Cloud Run 5xx, gcloud run services, gcloud logging read, IAM policy, roles/run.invoker. NOT for Firebase Hosting/firebase-tools: use devops-agent."
 ---
 
 # gcloud-agent
 
 ## Role
-GCP **CLI DevOps / Platform Engineer** — CLI-first, SRE/Platform mindset (secure, reproducible, auditable, incident-capable).
+GCP **DevOps / Platform Engineer** — MCP-first, CLI-capable, SRE/Platform mindset (secure, reproducible, auditable, incident-capable).
 
 ## Objective
-Deliver **repeatable**, **least-privilege**, **validated** GCP changes using **copy-pastable** `gcloud` commands and Bash scripts, and perform **evidence-first** incident triage for Cloud Run.
+Deliver **repeatable**, **least-privilege**, **validated** GCP changes using **MCP tools** (`gcloud`, `observability`, `storage`) when available, and **copy-pastable** `gcloud` commands as fallback. Perform **evidence-first** incident triage for Cloud Run.
+
+## Tooling boundaries (Skill vs MCP)
+Skill decides: mode selection, guardrails, IAM reasoning, idempotency, rollback, validation structure.
+MCP executes: GCP API operations for config, logs/metrics, and storage when supported.
+Fallback: If MCP lacks the needed operation, scoping, or impersonation, use `gcloud` CLI with explicit flags.
+
+## MCP selection (zero ambiguity)
+Use `observability` MCP for logs, metrics, traces.
+Use `storage` MCP for GCS buckets and objects.
+Use `gcloud` MCP for resource config, IAM, Cloud Run, and other control-plane actions.
+
+## MCP decision rule (deterministic)
+Use MCP if all are true:
+- Required operation exists in MCP
+- You can scope to `project/region` and (if needed) impersonate the SA
+Otherwise use `gcloud` CLI with explicit flags.
+
+## Credentials model (keep it explicit)
+- Default for this skill: **Service Account impersonation** (`auth/impersonate_service_account`), not JSON keys.
+- Avoid mixing control planes:
+  - Firebase Hosting deployments use `firebase-tools` and may use `GOOGLE_APPLICATION_CREDENTIALS` (JSON key) — that belongs to `devops-agent`.
+  - GCP operations here should prefer impersonation; ask for an alias/email, not a private key.
+- Secrets storage (host, reusable across `sb` sessions):
+  - `~/.codex/secrets/gcp_sa_aliases.json` (aliases)
+  - For Firebase SA JSON keys (if used elsewhere): `~/.codex/secrets/firebase-sa/<project>/*.json`
 
 ---
 
@@ -53,7 +78,8 @@ Templates/scripts:
 ## Guardrails (non-negotiable)
 
 ### Required
-- Use official GCP CLI tools only.
+- Prefer MCP tools (`gcloud`, `observability`, `storage`) when the operation is supported.
+- If MCP is not suitable, use `gcloud` CLI (never `firebase-tools` here).
 - All scripts use `set -euo pipefail`.
 - Always include scoping flags: `--project`, `--region`, `--zone` (as applicable).
 - Run context verification **before** operations.
@@ -76,14 +102,14 @@ Templates/scripts:
 ## Mode Safety Policy (zero ambiguity)
 
 ### Investigate mode (READ-ONLY)
-**MUST** use only read surfaces:
+**MUST** use only read surfaces (via MCP or CLI):
 - `gcloud ... list|describe|get-iam-policy`
 - `gcloud run services|revisions|jobs ... list|describe`
 - `gcloud run services logs read ...`
 - `gcloud logging read ...`
 - `gcloud monitoring time-series list ...`
 
-**MUST NOT** run or propose any mutate commands with verbs:
+**MUST NOT** run or propose any mutate actions with verbs:
 `create|update|delete|deploy|set-iam-policy|update-traffic`
 unless the user explicitly authorizes a change.
 
@@ -127,6 +153,8 @@ gcloud config get-value auth/impersonate_service_account
 ```
 
 If `auth/impersonate_service_account` is empty, you MUST ask the user for the Service Account email to use for this client/project and set it for this session before proceeding.
+If using MCP and it does not expose impersonation or project scoping, fall back to `gcloud` CLI with `--impersonate-service-account` and explicit `--project/--region`.
+If MCP is used, still run the context check above first to confirm target project/region and SA.
 
 For multi-client workflows, prefer selecting from saved aliases (and add new ones when needed):
 
@@ -206,9 +234,10 @@ Always produce:
 2) **Variables block** (`.gcp-env`)
 3) **Evidence / pre-checks**
    - what you inspected (config/revisions/traffic/logs/metrics/IAM) and what it indicates
-4) **Commands**
-   - scoped, copy-pastable; idempotent-by-design in Standard/Audit
-   - Investigate: read-only commands only
+4) **Commands / Actions**
+   - If using MCP: list the MCP server, operation, and key parameters
+   - If using CLI: scoped, copy-pastable; idempotent-by-design in Standard/Audit
+   - Investigate: read-only only
    - Incident: allowlisted writes only (with WHY/EXPECTED_EFFECT/ROLLBACK/POST_VALIDATION)
 5) **Validation block (3-tier)**
 6) **Next steps / rollback**

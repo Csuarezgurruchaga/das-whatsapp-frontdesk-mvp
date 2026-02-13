@@ -1,6 +1,6 @@
 ---
 name: devops-agent
-description: "Front-door DevOps agent that routes between Firebase and GCP specialists. Use when the request mentions Firebase/Hosting/firebase-tools/preview channels or mixes Firebase + GCP. NOT for gcloud-only Cloud Run/IAM/logging work without Firebase: use gcloud-agent."
+description: "Front-door DevOps agent that routes between Firebase and GCP specialists. Firebase work stays on firebase-tools; GCP work uses gcloud-agent (which may use MCP tools). Use when the request mentions Firebase/Hosting/firebase-tools/preview channels or mixes Firebase + GCP. NOT for gcloud-only Cloud Run/IAM/logging work without Firebase: use gcloud-agent."
 ---
 
 # devops-agent
@@ -10,12 +10,22 @@ Front-door DevOps agent for:
 - Firebase (especially Hosting) via `firebase-tools` (prefer `npx firebase-tools` to avoid global installs)
 - Mixed Firebase + GCP requests by coordinating and enforcing specialist ownership
 
+## Tooling boundaries (Skill vs MCP)
+Skill decides: control-plane routing, Firebase workflow, auth selection, deploy/rollback flow.
+MCP executes: GCP operations only via `gcloud-agent` when mixed workflows require it.
+
+## Mixed workflows (avoid ambiguity)
+When both Firebase and GCP are involved, output two clearly separated sections:
+1) Firebase actions (devops-agent, firebase-tools)
+2) GCP actions (delegate to gcloud-agent conventions and MCP usage)
+
 ## Core Principle: Pick The Right Control Plane
 Firebase is built on Google Cloud, but many Firebase surfaces (notably Hosting) are operated via `firebase-tools`, not `gcloud`.
 
 Use:
 - `firebase-tools` for Firebase resources (Hosting deploys/channels/rollbacks, Firebase project config, etc.).
 - For GCP/gcloud-only work, use `gcloud-agent` (specialist). Do not re-implement gcloud guardrails here.
+- MCP tools (`gcloud`, `observability`, `storage`) are for the GCP portion and should be used by `gcloud-agent`, not directly here.
 
 ## Routing / Ownership (make this deterministic)
 
@@ -32,7 +42,7 @@ Route to this skill when the prompt contains any of:
 Apply these rules verbatim:
 1) If the prompt contains Firebase/Hosting/firebase-tools keywords: use `devops-agent` (even if it also mentions GCP).
 2) If the prompt contains Cloud Run/IAM/VPC/logging/5xx/gcloud keywords and does NOT mention Firebase: use `gcloud-agent`.
-3) If it contains both: `devops-agent` owns Firebase output and coordinates the GCP portion by explicitly following `gcloud-agent` conventions (context-check first, scoped commands, idempotency, 3-tier validation).
+3) If it contains both: `devops-agent` owns Firebase output and coordinates the GCP portion by explicitly following `gcloud-agent` conventions (context-check first, scoped commands, idempotency, 3-tier validation, MCP when applicable).
 
 ### Default: stay on the Firebase control plane
 If the prompt does not include GCP/gcloud keywords, do not propose `gcloud` commands by default. Keep the response within the Firebase control plane (`firebase-tools`).
@@ -47,23 +57,6 @@ Exception (escape hatch): if the Firebase task is blocked by likely GCP-side iss
 
 ## Documentation Freshness (Context7)
 If any `firebase-tools` command/flag is uncertain (or the user asks for "latest/current"), consult up-to-date documentation via Context7 before proposing deploy commands. Do not guess flags or subcommands.
-
-## Minimal Playbook (Hosting Deploy)
-Use this as the default for any Firebase Hosting deploy (preview first, validate, then live).
-
-1) Ensure `firebase.json` serves `dist/` and (if client-side routing is used) includes rewrites to `index.html`.
-2) Build to `dist/`.
-3) Deploy to a preview channel.
-4) Validate via HTTP (`curl`) that `/` returns 200 and HTML.
-5) Only then deploy to live.
-6) Roll back only with explicit confirmation.
-
-### SPA deep-link validation (only if client-side routes exist)
-Validate 1-2 deep links (e.g. `/variant-01`) return 200 and serve HTML (rewrite working).
-
-### Validation ladder (normative)
-- First validate via HTTP (`curl -fsSIL`) to catch missing rewrites (server-side 404).
-- Use Playwright only if HTTP returns 200 but the app fails after load (JS/runtime errors), or if the user explicitly requests browser evidence (screenshots/console).
 
 ## Guardrails (non-negotiable)
 - No destructive actions (`delete`, `hosting:rollback`, traffic shifts) without explicit confirmation.
@@ -81,26 +74,37 @@ cat > .devops-env <<'EOF'
 export FIREBASE_PROJECT_ID="REPLACE_ME"
 export FIREBASE_HOSTING_SITE=""        # optional: site id (if using multi-site)
 export FIREBASE_HOSTING_TARGET=""      # optional: target name (if using .firebaserc)
+export GOOGLE_APPLICATION_CREDENTIALS="" # recommended for headless/Codex: service account JSON path
 EOF
 source .devops-env
 ```
 
-## Authentication (ask early)
+## Authentication (ask early, pick one)
 
-### firebase-tools
-Ask how deploy should authenticate:
-- **Local interactive**: browser login (`firebase login`) is acceptable.
-- **CI/headless**: prefer service account credentials (`GOOGLE_APPLICATION_CREDENTIALS`) or other non-interactive method approved by the user/security policy.
+### A) Headless (recommended for Codex / CI)
+Use a Service Account JSON key via `GOOGLE_APPLICATION_CREDENTIALS`.
+
+Secrets hygiene:
+- Never paste JSON contents into chat.
+- Prefer host storage per project: `~/.codex/secrets/firebase-sa/<FIREBASE_PROJECT_ID>/*.json`
+- In `sb`, that path is available as: `/root/.codex/secrets/firebase-sa/<FIREBASE_PROJECT_ID>/*.json`
 
 Pre-check:
 ```bash
 npx --yes firebase-tools --version
-npx --yes firebase-tools hosting:sites:list --project "$FIREBASE_PROJECT_ID"
+npx --yes firebase-tools projects:list --non-interactive
+npx --yes firebase-tools hosting:sites:list --project "$FIREBASE_PROJECT_ID" --non-interactive
 ```
 
-If auth fails, stop and ask for the intended auth method.
+If this fails with permissions errors, stop and ask for the intended identity/roles.
 
-## Firebase Hosting (Vite/React SPA) Deploy Workflow
+### B) Local interactive (only if you have a TTY)
+If the environment is non-interactive and `firebase login` fails with:
+`Cannot run login in non-interactive mode`
+then do **not** keep retrying login; switch to headless auth.
+
+## Minimal Playbook (Hosting Deploy)
+Default for Hosting: **preview → validate → live**.
 
 ### 0) Pre-check build output
 - Build must produce `dist/`
@@ -126,42 +130,44 @@ Use this `firebase.json` shape (edit to match repo):
 }
 ```
 
-If using multi-site Hosting, include `--site "$FIREBASE_HOSTING_SITE"` on deploy commands.
-If using a Hosting target, prefer `deploy --only "hosting:$FIREBASE_HOSTING_TARGET"` (requires `.firebaserc`).
+Multi-site rule (pick one):
+- If `FIREBASE_HOSTING_TARGET` is set: use `--only "hosting:$FIREBASE_HOSTING_TARGET"` (requires `.firebaserc`).
+- Else if `FIREBASE_HOSTING_SITE` is set: add `--site "$FIREBASE_HOSTING_SITE"` to deploy commands.
+- Else: deploy to the default site for the project.
 
-### 2) Prefer preview channel deploy
+### 2) Deploy to a preview channel (prefer stable name for automation)
 ```bash
-export CHANNEL_ID="preview-$(date +%Y%m%d-%H%M%S)"
-npx --yes firebase-tools hosting:channel:deploy "$CHANNEL_ID" --project "$FIREBASE_PROJECT_ID"
+export CHANNEL_ID="codex-preview"
+npx --yes firebase-tools hosting:channel:deploy "$CHANNEL_ID" --expires 7d --project "$FIREBASE_PROJECT_ID" --non-interactive
 ```
 
-### 3) Validate
+### 3) Validate (HTTP-first)
 Validate both:
 - HTTP 200 for `/`
 - HTTP 200 for the SPA route you care about (e.g. `/variant-01`)
 
-If the CLI prints the preview URL, curl it:
+Use the **Channel URL** printed by the deploy command as `<PREVIEW_URL>`, then curl it:
 ```bash
 curl -fsSIL "<PREVIEW_URL>/"
 curl -fsSIL "<PREVIEW_URL>/variant-01"
 ```
 
-If you need to quickly detect "rewrite missing" vs "app error", also check the content type:
-```bash
-curl -fsSIL "<PREVIEW_URL>/variant-01" | rg -i "HTTP/|content-type"
-```
+Use Playwright only if HTTP returns 200 but the app fails after load, or if the user explicitly requests browser evidence.
 
-### 4) Deploy to live
+### 4) Deploy to live (production)
 Only after validation:
 ```bash
-npx --yes firebase-tools deploy --only hosting --project "$FIREBASE_PROJECT_ID"
+npx --yes firebase-tools deploy --only hosting --project "$FIREBASE_PROJECT_ID" --non-interactive
 ```
 
 ### 5) Rollback (requires confirmation)
 If a bad release went live:
 ```bash
-npx --yes firebase-tools hosting:rollback --project "$FIREBASE_PROJECT_ID"
+npx --yes firebase-tools hosting:rollback --project "$FIREBASE_PROJECT_ID" --non-interactive
 ```
+
+## Known warnings (Hosting)
+- `hosting:channel: Unable to add channel domain to Firebase Auth` can be ignored unless you use Firebase Auth with preview domains.
 
 ## Output Contract (what this agent must emit)
 When responding to DevOps requests, always output in this order:
