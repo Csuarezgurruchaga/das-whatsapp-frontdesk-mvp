@@ -18,6 +18,10 @@ tmp/
 sessions/
 shell_snapshots/
 secrets/
+memories/
+state_5.sqlite
+state_5.sqlite-shm
+state_5.sqlite-wal
 
 # Skill folder local artifacts
 skills/.DS_Store
