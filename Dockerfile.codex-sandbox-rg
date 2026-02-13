@@ -7,13 +7,26 @@ RUN set -eux; \
     apt-get update; \
     apt-get install -y --no-install-recommends ca-certificates curl gnupg; \
     install -m 0755 -d /etc/apt/keyrings; \
+    curl -fsSL https://cli.github.com/packages/githubcli-archive-keyring.gpg \
+      | gpg --dearmor --batch --yes -o /etc/apt/keyrings/githubcli.gpg; \
+    chmod a+r /etc/apt/keyrings/githubcli.gpg; \
+    echo "deb [arch=$(dpkg --print-architecture) signed-by=/etc/apt/keyrings/githubcli.gpg] https://cli.github.com/packages stable main" \
+      > /etc/apt/sources.list.d/github-cli.list; \
     curl -fsSL https://packages.cloud.google.com/apt/doc/apt-key.gpg \
-      | gpg --dearmor -o /etc/apt/keyrings/google-cloud.gpg; \
+      | gpg --dearmor --batch --yes -o /etc/apt/keyrings/google-cloud.gpg; \
     chmod a+r /etc/apt/keyrings/google-cloud.gpg; \
     echo "deb [signed-by=/etc/apt/keyrings/google-cloud.gpg] https://packages.cloud.google.com/apt cloud-sdk main" \
       > /etc/apt/sources.list.d/google-cloud-sdk.list; \
+    curl -fsSL https://ngrok-agent.s3.amazonaws.com/ngrok.asc \
+      | gpg --dearmor --batch --yes -o /etc/apt/keyrings/ngrok.gpg; \
+    chmod a+r /etc/apt/keyrings/ngrok.gpg; \
+    echo "deb [signed-by=/etc/apt/keyrings/ngrok.gpg] https://ngrok-agent.s3.amazonaws.com buster main" \
+      > /etc/apt/sources.list.d/ngrok.list; \
     apt-get update; \
-    apt-get install -y --no-install-recommends google-cloud-cli; \
+    apt-get install -y --no-install-recommends gh google-cloud-cli ngrok; \
     rm -rf /var/lib/apt/lists/*; \
     ln -sfn /usr/bin/gcloud /usr/local/bin/gcloud; \
-    /usr/bin/gcloud --version
+    /usr/bin/gh --version; \
+    /usr/bin/gcloud --version; \
+    command -v ngrok >/dev/null; \
+    command -v gh >/dev/null
