@@ -143,7 +143,6 @@ fi
 GCP_ENABLED=1
 if [ "${SB_DISABLE_GCP:-0}" = "1" ]; then
   GCP_ENABLED=0
-  echo "[sb] NOTE: GCP bootstrap disabled (SB_DISABLE_GCP=1)."
 fi
 
 # ----------------------------
@@ -358,6 +357,7 @@ DOCKER_ARGS=(
   -e CONTEXT7_API_KEY
   -e GITHUB_USERNAME
   -e GITHUB_PERSONAL_ACCESS_TOKEN
+  -e NGROK_AUTHTOKEN
   -e SB_DISABLE_GCP
   -e HOME=/root
   -v "$PWD:/workspace"
@@ -384,6 +384,10 @@ docker run "${DOCKER_ARGS[@]}" \
   bash -lc '
 	    export PATH="/root/.npm-global/bin:/usr/local/sbin:/usr/local/bin:/usr/sbin:/usr/bin:/sbin:/bin"
 	    set -euo pipefail
+      # Avoid mmap-related deadlocks on bind mounts for ripgrep inside sb sessions only.
+      SB_RIPGREP_CONFIG="/tmp/sb-ripgreprc"
+      printf "%s\n" "--no-mmap" > "$SB_RIPGREP_CONFIG"
+      export RIPGREP_CONFIG_PATH="$SB_RIPGREP_CONFIG"
 	    if [ "${SB_DISABLE_GCP:-0}" = "1" ]; then
 	      echo "[sb] NOTE: SB_DISABLE_GCP=1 set; skipping gcloud bootstrap/auth setup."
 	    else
@@ -440,7 +444,7 @@ docker run "${DOCKER_ARGS[@]}" \
 	        fi
 	      fi
 
-	      echo "[sb] GCP: CLOUDSDK_CONFIG=$CLOUDSDK_CONFIG (seeded=$seeded)"
+	      echo "[sb] GCP: CLOUDSDK_CONFIG=$CLOUDSDK_CONFIG (seeded=$seeded). Set SB_DISABLE_GCP=1 to skip gcloud setup."
 
 	      # Ensure there is no default project (force explicit --project on commands).
 	      gcloud --quiet config unset core/project >/dev/null 2>&1 || true
