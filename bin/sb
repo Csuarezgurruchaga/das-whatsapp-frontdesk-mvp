@@ -61,7 +61,8 @@ done
 CONTAINER_WRAPPER_PATH="/root/.codex/dev-tools/spec-interview-ui-wrapper/scripts/codex-interview-wrapper.py"
 HOST_WRAPPER_PATH="${HOME}/.codex/dev-tools/spec-interview-ui-wrapper/scripts/codex-interview-wrapper.py"
 SB_CODEX_SANDBOX="${SB_CODEX_SANDBOX:-danger-full-access}"
-SB_CODEX_BYPASS_SANDBOX="${SB_CODEX_BYPASS_SANDBOX:-1}"
+SB_CODEX_BYPASS_SANDBOX="${SB_CODEX_BYPASS_SANDBOX:-0}"
+SB_CODEX_APPROVAL="${SB_CODEX_APPROVAL:-on-request}"
 
 case "$SB_CODEX_SANDBOX" in
   read-only|workspace-write|danger-full-access)
@@ -83,9 +84,21 @@ case "$SB_CODEX_BYPASS_SANDBOX" in
     ;;
 esac
 
+case "$SB_CODEX_APPROVAL" in
+  untrusted|on-failure|on-request|never)
+    ;;
+  *)
+    echo "[sb] ERROR: invalid SB_CODEX_APPROVAL value: ${SB_CODEX_APPROVAL}" >&2
+    echo "     Allowed: untrusted, on-failure, on-request, never" >&2
+    exit 1
+    ;;
+esac
+
 CODEX_UI_CMD="codex --no-alt-screen --sandbox ${SB_CODEX_SANDBOX}"
 if [ "${SB_CODEX_BYPASS_SANDBOX}" = "1" ]; then
   CODEX_UI_CMD="${CODEX_UI_CMD} --dangerously-bypass-approvals-and-sandbox"
+else
+  CODEX_UI_CMD="${CODEX_UI_CMD} --ask-for-approval ${SB_CODEX_APPROVAL}"
 fi
 
 UI_MODE=0
@@ -105,6 +118,9 @@ fi
 if [ "${UI_MODE}" -eq 1 ]; then
   echo "[sb] Codex internal sandbox: ${SB_CODEX_SANDBOX}"
   echo "[sb] Codex bypass approvals+sandbox: ${SB_CODEX_BYPASS_SANDBOX}"
+  if [ "${SB_CODEX_BYPASS_SANDBOX}" = "0" ]; then
+    echo "[sb] Codex approval policy: ${SB_CODEX_APPROVAL}"
+  fi
   if [ ! -f "${HOST_WRAPPER_PATH}" ]; then
     echo "[sb] ERROR: UI wrapper not found on host: ${HOST_WRAPPER_PATH}" >&2
     echo "     Fix: ensure ~/.codex is installed and contains dev-tools/spec-interview-ui-wrapper." >&2
@@ -121,6 +137,7 @@ else
   if [ "${#CMD[@]}" -gt 0 ] && [ "${CMD[0]}" = "codex" ]; then
     has_sandbox_flag=0
     has_bypass_flag=0
+    has_approval_flag=0
     for arg in "${CMD[@]}"; do
       if [ "$arg" = "--sandbox" ]; then
         has_sandbox_flag=1
@@ -128,15 +145,23 @@ else
       if [ "$arg" = "--dangerously-bypass-approvals-and-sandbox" ]; then
         has_bypass_flag=1
       fi
+      if [ "$arg" = "--ask-for-approval" ] || [ "$arg" = "-a" ]; then
+        has_approval_flag=1
+      fi
     done
     if [ "$has_sandbox_flag" -eq 0 ]; then
       CMD+=(--sandbox "$SB_CODEX_SANDBOX")
     fi
     if [ "${SB_CODEX_BYPASS_SANDBOX}" = "1" ] && [ "$has_bypass_flag" -eq 0 ]; then
       CMD+=(--dangerously-bypass-approvals-and-sandbox)
+    elif [ "${SB_CODEX_BYPASS_SANDBOX}" = "0" ] && [ "$has_approval_flag" -eq 0 ]; then
+      CMD+=(--ask-for-approval "$SB_CODEX_APPROVAL")
     fi
     echo "[sb] Codex internal sandbox: ${SB_CODEX_SANDBOX}"
     echo "[sb] Codex bypass approvals+sandbox: ${SB_CODEX_BYPASS_SANDBOX}"
+    if [ "${SB_CODEX_BYPASS_SANDBOX}" = "0" ]; then
+      echo "[sb] Codex approval policy: ${SB_CODEX_APPROVAL}"
+    fi
   fi
 fi
 
