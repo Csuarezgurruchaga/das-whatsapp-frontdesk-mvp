@@ -9,7 +9,7 @@ Progressive disclosure: this file is intentionally short. Details live in `docs/
 ## Quick start
 - Ensure local ledger exists at `<repo_root>/AGENTS.md` (create it if missing).
 - Classify scope (trivial vs non-trivial). If unsure: treat as non-trivial.
-- Non-trivial: run `spec-interview` and create/update `docs/specs/<slug>/SPEC.md` until it has zero Open Questions.
+- Non-trivial: run `spec-interview` and create/update `<repo_root>/docs/specs/<slug>/SPEC.md` until it has zero Open Questions.
 
 ## Index
 - Hard rules (non-negotiable): `docs/agents/00-hard-rules.md`

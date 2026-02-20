@@ -9,6 +9,17 @@ ONLY after a discovery phase confirms file-disjoint ownership AND sub-agents are
 
 ---
 
+## EXECUTIVE SUMMARY (read first)
+
+- Authority: PRIMARY-only for branch/commit/push/docs/merge/final verification.
+- Scope: default 1 TaskID per chunk; max 2 only if strict file-disjoint + independent verification.
+- Hard-stop: required spec files present + Open Questions empty + TASKS Execution status parseable + Task fields complete.
+- Discovery first: compute MUST/MAY touch sets; ANY overlap (incl MAY) => serialize (no sub-agents).
+- Fan-out safety: attempt once; never wait unless agents are ready; if `agents: none` or `pending init` => degrade to PRIMARY-only.
+- Per-Task flow: implement → verify → `/review` pre-commit (advisory; minimal fix only; at most one re-run) → atomic commit.
+- Resume anchor: update TASKS Execution status + CHECKPOINT, commit docs, push success.
+- End gate: only if Remaining=0 AND a high-risk signal holds; otherwise skip.
+
 ## NON-NEGOTIABLES (hard)
 
 - Only PRIMARY may:
@@ -181,8 +192,9 @@ For each TaskID:
 1) Validate patch vs Done condition + constraints
 2) Apply/implement patch (PRIMARY-only)
 3) Run minimal verification per ACCEPTANCE scoped to that task
-4) Atomic commit for that task only (format enforced)
-5) Repeat for next task (if any)
+4) Run `/review` pre-commit (advisory; fix only if minimal + in-scope; at most one re-run after fix)
+5) Atomic commit for that task only (format enforced)
+6) Repeat for next task (if any)
 
 ---
 
@@ -245,6 +257,18 @@ Include:
 F1) Validate vs Done condition + constraints  
 F2) Implement patch (PRIMARY-only)  
 F3) Run minimal verification  
+
+F3.5) Pre-commit review (mandatory for every TaskID)
+- Run Codex CLI command: `/review`
+- Treat output as **advisory** and classify findings:
+  - **Bug / correctness issue** (must fix if minimal + in-scope)
+  - **Test gap** (add/adjust tests only if required by ACCEPTANCE)
+  - **Style / refactor / nice-to-have** (IGNORE unless required by SPEC/ACCEPTANCE)
+- If `/review` reports a **real bug**:
+  - Implement the minimal fix (PRIMARY-only; no scope creep).
+  - Run the relevant verification.
+  - Re-run `/review` at most ONCE after the fix (no loops).
+
 F4) Atomic commit:
 `<type>(<slug>): <TaskID> <short title>`  
 F5) Record outcomes (pass/fail) and deviations
@@ -260,7 +284,12 @@ F5) Record outcomes (pass/fail) and deviations
 
 ### Conditional Gate — End-of-flow review prompt (only if workflow complete)
 
-**Run condition (deterministic):** ONLY enter this gate if the workflow is complete after this chunk.
+**Run condition (deterministic):** ONLY enter this gate if the workflow is complete after this chunk AND at least one high-risk signal holds:
+High-risk signals:
+- Implemented 2 TaskIDs in this chunk, OR
+- Any `/review`-triggered fix was required during Step F, OR
+- Touch set included system wiring (routing/config/DI/build/deps).
+
 Consider it complete if either:
 - a fresh recompute AFTER Step G (re-read TASKS.md) yields `Remaining: 0`, OR
 - TASKS.md indicates there is no next TaskID (all tasks done).
@@ -269,7 +298,7 @@ If run condition holds:
 1) Announce completion state with evidence:
    - Report `Remaining: 0` (or "no next TaskID") and the recompute method used (from Step G re-read).
 
-2) DO NOT run `/review` automatically. Ask the user (verbatim):
+2) Do NOT run an additional `/review` automatically. Ask the user (verbatim):
 
    **Exact question (must use verbatim):**
    `Workflow complete (Remaining: 0). Choose: (A) run /review now, or (B) switch model then run /review. Reply A or B.`

@@ -25,7 +25,7 @@ Any of:
 
 ## Spec workflow
 1) Run `spec-interview` first.
-2) Create/update `docs/specs/<slug>/SPEC.md`.
+2) Create/update `<repo_root>/docs/specs/<slug>/SPEC.md`.
 3) Ensure SPEC has **zero Open Questions**.
 4) Implement minimal, reviewable diffs.
 5) Verify (see `02-verification-safety.md`).

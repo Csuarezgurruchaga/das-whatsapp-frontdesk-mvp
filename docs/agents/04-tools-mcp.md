@@ -47,3 +47,22 @@ Safety:
 - prefer copy over move unless required
 - never upload secrets without explicit instruction
 - log meaningful storage mutations in local ledger
+
+## Remotion Documentation MCP
+Use when:
+- building or modifying Remotion videos/compositions
+- confirming API usage, component props, rendering/export workflow
+- resolving version-specific behavior or breaking changes
+
+Safety:
+- prefer minimal examples and link back to the exact API name you used
+- do not guess props/types; confirm via this MCP before implementing
+
+## Remotion Documentation MCP (`remotion-documentation`)
+What it is:
+- Documentation MCP for Remotion. It indexes Remotion docs into a vector database and answers with domain-specific references (not a remote render/control API).
+
+Use when:
+- working in a Remotion project and you need exact API/props usage (do not guess)
+- you need canonical examples for animations, sequencing, transitions, audio/video handling, captions
+- you suspect version/package alignment or behavior differences and want to confirm via docs

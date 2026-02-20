@@ -7,7 +7,7 @@ These rules must be followed in every repository.
   - If missing: create it (see `03-local-ledger.md`).
   - Action: read it fully before proceeding.
 - **Understand scope** (trivial vs non-trivial). If uncertain: treat as non-trivial.
-- **Check for existing specs** under `docs/specs/` (if present).
+- **Check for existing specs** under `<repo_root>/docs/specs/` (if present).
 
 ## 2) Spec-first gates
 - **Non-trivial work MUST use the spec workflow** (see `01-workflow.md`).

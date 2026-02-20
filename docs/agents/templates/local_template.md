@@ -12,6 +12,7 @@
 
 - Project: <name>
 - Repo root: <path or URL>
+- Specs (source of truth): docs/specs/<slug>/* (for non-trivial work)
 - Stack: <e.g., Python 3.11, FastAPI, Postgres>
 - Run: `<command>`
 - Test: `<command>`
