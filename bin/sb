@@ -63,7 +63,6 @@ HOST_WRAPPER_PATH="${HOME}/.codex/dev-tools/spec-interview-ui-wrapper/scripts/co
 
 UI_MODE=0
 UI_ARGS=()
-LEGACY_DOCKER_ALIAS=0
 if [ "${#POSITIONAL[@]}" -eq 0 ]; then
   UI_MODE=1
 else
@@ -73,14 +72,10 @@ else
   elif [ "${POSITIONAL[0]}" = "docker" ]; then
     UI_MODE=1
     UI_ARGS=("${POSITIONAL[@]:1}")
-    LEGACY_DOCKER_ALIAS=1
   fi
 fi
 
 if [ "${UI_MODE}" -eq 1 ]; then
-  if [ "${LEGACY_DOCKER_ALIAS}" -eq 1 ]; then
-    echo "[sb] NOTE: 'sb docker' is a legacy alias; launching Codex UI mode."
-  fi
   if [ ! -f "${HOST_WRAPPER_PATH}" ]; then
     echo "[sb] ERROR: UI wrapper not found on host: ${HOST_WRAPPER_PATH}" >&2
     echo "     Fix: ensure ~/.codex is installed and contains dev-tools/spec-interview-ui-wrapper." >&2
@@ -521,6 +516,15 @@ docker run "${DOCKER_ARGS[@]}" \
 
     if [ ! -f "$HOME/.gitconfig" ]; then
       printf "[include]\n  path = /root/.gitconfig.host\n" > "$HOME/.gitconfig"
+    fi
+
+    if command -v npm > /dev/null 2>&1; then
+      npm_version="$(npm --version 2>/dev/null || true)"
+      npm_major="${npm_version%%.*}"
+      if [[ "$npm_major" =~ ^[0-9]+$ ]] && [ "$npm_major" -lt 11 ]; then
+        echo "[sb] npm: upgrading to 11.10.1..."
+        npm install -g npm@11.10.1 > /dev/null 2>&1 || echo "[sb] WARNING: npm upgrade failed; continuing with current npm."
+      fi
     fi
 
     if ! command -v codex > /dev/null 2>&1; then
