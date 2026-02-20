@@ -135,6 +135,8 @@ else
     if [ "${SB_CODEX_BYPASS_SANDBOX}" = "1" ] && [ "$has_bypass_flag" -eq 0 ]; then
       CMD+=(--dangerously-bypass-approvals-and-sandbox)
     fi
+    echo "[sb] Codex internal sandbox: ${SB_CODEX_SANDBOX}"
+    echo "[sb] Codex bypass approvals+sandbox: ${SB_CODEX_BYPASS_SANDBOX}"
   fi
 fi
 
@@ -569,7 +571,6 @@ docker run "${DOCKER_ARGS[@]}" \
       npm_version="$(npm --version 2>/dev/null || true)"
       npm_major="${npm_version%%.*}"
       if [[ "$npm_major" =~ ^[0-9]+$ ]] && [ "$npm_major" -lt 11 ]; then
-        echo "[sb] npm: upgrading to 11.10.1..."
         npm install -g npm@11.10.1 > /dev/null 2>&1 || echo "[sb] WARNING: npm upgrade failed; continuing with current npm."
       fi
     fi
