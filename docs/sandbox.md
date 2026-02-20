@@ -18,6 +18,9 @@ Likely cause:
 Invocation note:
 - Use `./bin/sb` (or `sb`) to launch Codex UI mode.
 - `sb docker` is kept as a legacy alias to the same UI mode.
+- `sb` now sets Codex internal sandbox via `SB_CODEX_SANDBOX` (default: `danger-full-access`) to avoid internal Landlock panics. Override if needed:
+  - `SB_CODEX_SANDBOX=workspace-write`
+  - `SB_CODEX_SANDBOX=read-only`
 
 ## A/B verification steps
 Run from the repo root (`~/.codex`).
