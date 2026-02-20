@@ -21,6 +21,7 @@ Invocation note:
 - `sb` now sets Codex internal sandbox via `SB_CODEX_SANDBOX` (default: `danger-full-access`) to avoid internal Landlock panics. Override if needed:
   - `SB_CODEX_SANDBOX=workspace-write`
   - `SB_CODEX_SANDBOX=read-only`
+- `sb` also enables Codex bypass mode by default (`SB_CODEX_BYPASS_SANDBOX=1`), equivalent to `--dangerously-bypass-approvals-and-sandbox`. Set `SB_CODEX_BYPASS_SANDBOX=0` to disable it.
 
 ## A/B verification steps
 Run from the repo root (`~/.codex`).
