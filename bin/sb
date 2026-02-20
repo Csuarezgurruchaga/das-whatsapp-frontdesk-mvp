@@ -87,7 +87,11 @@ if [ "${UI_MODE}" -eq 1 ]; then
     echo "     (sb-ui previously required the same wrapper inside the sandbox at: ${CONTAINER_WRAPPER_PATH})" >&2
     exit 1
   fi
-  CMD=(bash -lc "python3 \"${CONTAINER_WRAPPER_PATH}\" --cmd \"codex --no-alt-screen\" \"\$@\" < /dev/tty" -- "${UI_ARGS[@]}")
+  if [ "${#UI_ARGS[@]}" -gt 0 ]; then
+    CMD=(bash -lc "python3 \"${CONTAINER_WRAPPER_PATH}\" --cmd \"codex --no-alt-screen\" \"\$@\" < /dev/tty" -- "${UI_ARGS[@]}")
+  else
+    CMD=(bash -lc "python3 \"${CONTAINER_WRAPPER_PATH}\" --cmd \"codex --no-alt-screen\" \"\$@\" < /dev/tty" --)
+  fi
 else
   CMD=("${POSITIONAL[@]}")
 fi
