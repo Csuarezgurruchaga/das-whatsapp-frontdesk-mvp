@@ -117,8 +117,9 @@ fi
 
 if [ "${UI_MODE}" -eq 1 ]; then
   echo "[sb] Codex internal sandbox: ${SB_CODEX_SANDBOX_MODE}"
-  echo "[sb] Codex bypass approvals+sandbox: ${SB_CODEX_BYPASS_SANDBOX}"
-  if [ "${SB_CODEX_BYPASS_SANDBOX}" = "0" ]; then
+  if [ "${SB_CODEX_BYPASS_SANDBOX}" = "1" ]; then
+    echo "[sb] Codex bypass approvals+sandbox: 1"
+  else
     echo "[sb] Codex approval policy: ${SB_CODEX_APPROVAL_POLICY}"
   fi
   if [ ! -f "${HOST_WRAPPER_PATH}" ]; then
@@ -158,8 +159,9 @@ else
       CMD+=(--ask-for-approval "$SB_CODEX_APPROVAL_POLICY")
     fi
     echo "[sb] Codex internal sandbox: ${SB_CODEX_SANDBOX_MODE}"
-    echo "[sb] Codex bypass approvals+sandbox: ${SB_CODEX_BYPASS_SANDBOX}"
-    if [ "${SB_CODEX_BYPASS_SANDBOX}" = "0" ]; then
+    if [ "${SB_CODEX_BYPASS_SANDBOX}" = "1" ]; then
+      echo "[sb] Codex bypass approvals+sandbox: 1"
+    else
       echo "[sb] Codex approval policy: ${SB_CODEX_APPROVAL_POLICY}"
     fi
   fi
