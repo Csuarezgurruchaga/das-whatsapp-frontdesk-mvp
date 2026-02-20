@@ -9,6 +9,7 @@ AGENTS.md
 auth.json
 history.jsonl
 models_cache.json
+version.json
 session_index.jsonl
 .personality_migration
 gcloud/

@@ -7,14 +7,31 @@ personality = "pragmatic"
 
 [mcp_servers.context7]
 command = "bash"
-args = ["-lc", "exec npx -y @upstash/context7-mcp --api-key \"$CONTEXT7_API_KEY\""]
+args = ["-lc", 'exec npx -y @upstash/context7-mcp --api-key "$CONTEXT7_API_KEY"']
 
 [mcp_servers.playwright]
 command = "npx"
 args = ["-y", "@playwright/mcp@latest", "--isolated"]
 
+[mcp_servers.gcloud]
+command = "npx"
+args = ["-y", "@google-cloud/gcloud-mcp"]
+
+[mcp_servers.observability]
+command = "npx"
+args = ["-y", "@google-cloud/observability-mcp"]
+
+[mcp_servers.storage]
+command = "npx"
+args = ["-y", "@google-cloud/storage-mcp"]
+
+[mcp_servers.remotion-documentation]
+command = "npx"
+args = ["-y", "@remotion/mcp@latest"]
+
 [tui]
 notifications = ["complete"]
+status_line = ["model-with-reasoning", "git-branch", "context-remaining", "context-window-size", "used-tokens", "total-input-tokens", "total-output-tokens"]
 
 
 [projects."/Users/csuarezgurruchaga/Desktop/real-state-top"]
@@ -106,14 +123,16 @@ hide_rate_limit_model_nudge = true
 
 [notice.model_migrations]
 "gpt-5.1-codex-max" = "gpt-5.2-codex"
-"gpt-5.2" = "gpt-5.2-codex"
+"gpt-5.2" = "gpt-5.3-codex"
 "gpt-5.1-codex-mini" = "gpt-5.2-codex"
+"gpt-5.2-codex" = "gpt-5.3-codex"
 
 [features]
 hide_agent_reasoning = false
 unified_exec = true
 shell_snapshot = true
 steer = true
-collab = true
-collaboration_modes = true
+multi_agent = true
 apps = true
+memory_tool=true
+sqlite=true
