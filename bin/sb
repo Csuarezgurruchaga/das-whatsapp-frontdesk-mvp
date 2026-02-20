@@ -372,6 +372,34 @@ DOCKER_ARGS=(
   -v codex_cache:/root/.cache
 )
 
+SB_SECCOMP_MODE="${SB_SECCOMP:-landlock}"
+SB_SECCOMP_MODE="$(printf "%s" "$SB_SECCOMP_MODE" | tr '[:upper:]' '[:lower:]')"
+
+case "$SB_SECCOMP_MODE" in
+  landlock)
+    SECCOMP_PROFILE_PATH="${ROOT_DIR}/security/seccomp-landlock.json"
+    if [ ! -f "$SECCOMP_PROFILE_PATH" ]; then
+      echo "[sb] ERROR: seccomp profile not found: $SECCOMP_PROFILE_PATH" >&2
+      echo "     Fix: ensure the repo has security/seccomp-landlock.json." >&2
+      exit 1
+    fi
+    DOCKER_ARGS+=(--security-opt "seccomp=${SECCOMP_PROFILE_PATH}")
+    echo "[sb] Seccomp: mode=landlock (--security-opt seccomp=$(abbrev_path "$SECCOMP_PROFILE_PATH"))"
+    ;;
+  default)
+    echo "[sb] Seccomp: mode=default (engine default; no --security-opt seccomp=... override)"
+    ;;
+  unconfined)
+    DOCKER_ARGS+=(--security-opt "seccomp=unconfined")
+    echo "[sb] Seccomp: mode=unconfined (--security-opt seccomp=unconfined)"
+    ;;
+  *)
+    echo "[sb] ERROR: invalid SB_SECCOMP value: ${SB_SECCOMP_MODE}" >&2
+    echo "     Allowed: landlock (default), default, unconfined" >&2
+    exit 1
+    ;;
+esac
+
 if [ "${GCP_ENABLED}" -eq 1 ]; then
   DOCKER_ARGS+=(
     -e SB_GCP_IMPERSONATE_SA
