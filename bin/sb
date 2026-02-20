@@ -13,6 +13,20 @@ done
 SCRIPT_DIR="$(cd "$(dirname "$SCRIPT_SOURCE")" && pwd)"
 ROOT_DIR="$(cd "$SCRIPT_DIR/.." && pwd)"
 
+append_csv_docker_opt() {
+  local csv="$1"
+  local opt="$2"
+  local item
+  local item_trimmed
+  IFS=',' read -r -a _sb_items <<< "$csv"
+  for item in "${_sb_items[@]}"; do
+    item_trimmed="$(printf "%s" "$item" | xargs)"
+    if [ -n "$item_trimmed" ]; then
+      DOCKER_ARGS+=("$opt" "$item_trimmed")
+    fi
+  done
+}
+
 # ----------------------------
 # 0) Flags y sesion
 # ----------------------------
@@ -178,6 +192,11 @@ if [ -n "${PORT_OFFSET}" ] && ! [[ "${PORT_OFFSET}" =~ ^[0-9]+$ ]]; then
   echo "[sb] ERROR: --offset must be a non-negative integer." >&2
   exit 1
 fi
+
+SB_NETWORK_MODE="${SB_NETWORK:-bridge}"
+SB_DNS_SERVERS="${SB_DNS_SERVERS:-}"
+SB_DNS_SEARCH="${SB_DNS_SEARCH:-}"
+SB_DNS_OPT="${SB_DNS_OPT:-}"
 
 CONTAINER_NAME="codex-sb-${SESSION_ID}"
 
@@ -420,6 +439,16 @@ echo "  - ~/.gitconfig -> /root/.gitconfig.host (ro)"
 echo "  - ~/.codex -> /root/.codex (rw)"
 echo "  - codex_home -> /root (rw)"
 echo "  - codex_cache -> /root/.cache (rw)"
+echo "[sb] Network: mode=${SB_NETWORK_MODE}"
+if [ -n "${SB_DNS_SERVERS}" ]; then
+  echo "[sb] DNS servers: ${SB_DNS_SERVERS}"
+fi
+if [ -n "${SB_DNS_SEARCH}" ]; then
+  echo "[sb] DNS search: ${SB_DNS_SEARCH}"
+fi
+if [ -n "${SB_DNS_OPT}" ]; then
+  echo "[sb] DNS options: ${SB_DNS_OPT}"
+fi
 
 DOCKER_ARGS=(
   --rm -it
@@ -430,6 +459,7 @@ DOCKER_ARGS=(
   --label "${LABEL_SESSION_KEY}=${SESSION_ID}"
   --name "${CONTAINER_NAME}"
   --user 0:0
+  --network "${SB_NETWORK_MODE}"
   --cap-add=NET_ADMIN
   --cap-add=NET_RAW
   -p "${HOST_PORT_3000}:3000"
@@ -440,8 +470,16 @@ DOCKER_ARGS=(
   -e CONTEXT7_API_KEY
   -e GITHUB_USERNAME
   -e GITHUB_PERSONAL_ACCESS_TOKEN
+  -e HTTP_PROXY
+  -e HTTPS_PROXY
+  -e NO_PROXY
+  -e http_proxy
+  -e https_proxy
+  -e no_proxy
   -e NGROK_AUTHTOKEN
   -e SB_DISABLE_GCP
+  -e SB_NET_DEBUG
+  -e SB_NET_STRICT
   -e HOME=/root
   -v "$PWD:/workspace"
   -v "${SCREENSHOTS_DIR}:/screenshots:ro"
@@ -454,6 +492,16 @@ DOCKER_ARGS=(
   -v codex_home:/root
   -v codex_cache:/root/.cache
 )
+
+if [ -n "${SB_DNS_SERVERS}" ]; then
+  append_csv_docker_opt "${SB_DNS_SERVERS}" "--dns"
+fi
+if [ -n "${SB_DNS_SEARCH}" ]; then
+  append_csv_docker_opt "${SB_DNS_SEARCH}" "--dns-search"
+fi
+if [ -n "${SB_DNS_OPT}" ]; then
+  append_csv_docker_opt "${SB_DNS_OPT}" "--dns-opt"
+fi
 
 SB_SECCOMP_MODE="${SB_SECCOMP:-landlock}"
 SB_SECCOMP_MODE="$(printf "%s" "$SB_SECCOMP_MODE" | tr '[:upper:]' '[:lower:]')"
@@ -495,6 +543,32 @@ docker run "${DOCKER_ARGS[@]}" \
   bash -lc '
 	    export PATH="/root/.npm-global/bin:/usr/local/sbin:/usr/local/bin:/usr/sbin:/usr/bin:/sbin:/bin"
 	    set -euo pipefail
+      if [ "${SB_NET_DEBUG:-0}" = "1" ]; then
+        strict_mode="${SB_NET_STRICT:-0}"
+        net_failed=0
+        echo "[sb] NET_DEBUG: checking DNS and HTTPS reachability..."
+
+        if getent hosts github.com >/dev/null 2>&1; then
+          echo "[sb] NET_DEBUG: DNS lookup github.com OK"
+        elif command -v nslookup >/dev/null 2>&1 && nslookup github.com >/dev/null 2>&1; then
+          echo "[sb] NET_DEBUG: DNS lookup github.com OK (nslookup)"
+        else
+          echo "[sb] NET_DEBUG: DNS lookup github.com FAILED" >&2
+          net_failed=1
+        fi
+
+        if command -v curl >/dev/null 2>&1 && curl -I https://github.com --max-time 10 >/dev/null 2>&1; then
+          echo "[sb] NET_DEBUG: HTTPS github.com OK"
+        else
+          echo "[sb] NET_DEBUG: HTTPS github.com FAILED" >&2
+          net_failed=1
+        fi
+
+        if [ "$net_failed" -eq 1 ] && [ "$strict_mode" = "1" ]; then
+          echo "[sb] ERROR: network diagnostics failed and SB_NET_STRICT=1." >&2
+          exit 1
+        fi
+      fi
       # Avoid mmap-related deadlocks on bind mounts for ripgrep inside sb sessions only.
       SB_RIPGREP_CONFIG="/tmp/sb-ripgreprc"
       printf "%s\n" "--no-mmap" > "$SB_RIPGREP_CONFIG"
