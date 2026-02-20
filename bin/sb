@@ -60,15 +60,15 @@ done
 # command is provided (e.g. `sb bash -lc ...`, `sb codex`).
 CONTAINER_WRAPPER_PATH="/root/.codex/dev-tools/spec-interview-ui-wrapper/scripts/codex-interview-wrapper.py"
 HOST_WRAPPER_PATH="${HOME}/.codex/dev-tools/spec-interview-ui-wrapper/scripts/codex-interview-wrapper.py"
-SB_CODEX_SANDBOX="${SB_CODEX_SANDBOX:-danger-full-access}"
+SB_CODEX_SANDBOX_MODE="${SB_CODEX_SANDBOX_MODE:-${CODEX_SANDBOX_MODE:-${SB_CODEX_SANDBOX:-danger-full-access}}}"
 SB_CODEX_BYPASS_SANDBOX="${SB_CODEX_BYPASS_SANDBOX:-0}"
-SB_CODEX_APPROVAL="${SB_CODEX_APPROVAL:-on-request}"
+SB_CODEX_APPROVAL_POLICY="${SB_CODEX_APPROVAL_POLICY:-${CODEX_APPROVAL_POLICY:-${SB_CODEX_APPROVAL:-on-request}}}"
 
-case "$SB_CODEX_SANDBOX" in
+case "$SB_CODEX_SANDBOX_MODE" in
   read-only|workspace-write|danger-full-access)
     ;;
   *)
-    echo "[sb] ERROR: invalid SB_CODEX_SANDBOX value: ${SB_CODEX_SANDBOX}" >&2
+    echo "[sb] ERROR: invalid SB_CODEX_SANDBOX_MODE value: ${SB_CODEX_SANDBOX_MODE}" >&2
     echo "     Allowed: read-only, workspace-write, danger-full-access" >&2
     exit 1
     ;;
@@ -84,21 +84,21 @@ case "$SB_CODEX_BYPASS_SANDBOX" in
     ;;
 esac
 
-case "$SB_CODEX_APPROVAL" in
+case "$SB_CODEX_APPROVAL_POLICY" in
   untrusted|on-failure|on-request|never)
     ;;
   *)
-    echo "[sb] ERROR: invalid SB_CODEX_APPROVAL value: ${SB_CODEX_APPROVAL}" >&2
+    echo "[sb] ERROR: invalid SB_CODEX_APPROVAL_POLICY value: ${SB_CODEX_APPROVAL_POLICY}" >&2
     echo "     Allowed: untrusted, on-failure, on-request, never" >&2
     exit 1
     ;;
 esac
 
-CODEX_UI_CMD="codex --no-alt-screen --sandbox ${SB_CODEX_SANDBOX}"
+CODEX_UI_CMD="codex --no-alt-screen --sandbox ${SB_CODEX_SANDBOX_MODE}"
 if [ "${SB_CODEX_BYPASS_SANDBOX}" = "1" ]; then
   CODEX_UI_CMD="${CODEX_UI_CMD} --dangerously-bypass-approvals-and-sandbox"
 else
-  CODEX_UI_CMD="${CODEX_UI_CMD} --ask-for-approval ${SB_CODEX_APPROVAL}"
+  CODEX_UI_CMD="${CODEX_UI_CMD} --ask-for-approval ${SB_CODEX_APPROVAL_POLICY}"
 fi
 
 UI_MODE=0
@@ -116,10 +116,10 @@ else
 fi
 
 if [ "${UI_MODE}" -eq 1 ]; then
-  echo "[sb] Codex internal sandbox: ${SB_CODEX_SANDBOX}"
+  echo "[sb] Codex internal sandbox: ${SB_CODEX_SANDBOX_MODE}"
   echo "[sb] Codex bypass approvals+sandbox: ${SB_CODEX_BYPASS_SANDBOX}"
   if [ "${SB_CODEX_BYPASS_SANDBOX}" = "0" ]; then
-    echo "[sb] Codex approval policy: ${SB_CODEX_APPROVAL}"
+    echo "[sb] Codex approval policy: ${SB_CODEX_APPROVAL_POLICY}"
   fi
   if [ ! -f "${HOST_WRAPPER_PATH}" ]; then
     echo "[sb] ERROR: UI wrapper not found on host: ${HOST_WRAPPER_PATH}" >&2
@@ -150,17 +150,17 @@ else
       fi
     done
     if [ "$has_sandbox_flag" -eq 0 ]; then
-      CMD+=(--sandbox "$SB_CODEX_SANDBOX")
+      CMD+=(--sandbox "$SB_CODEX_SANDBOX_MODE")
     fi
     if [ "${SB_CODEX_BYPASS_SANDBOX}" = "1" ] && [ "$has_bypass_flag" -eq 0 ]; then
       CMD+=(--dangerously-bypass-approvals-and-sandbox)
     elif [ "${SB_CODEX_BYPASS_SANDBOX}" = "0" ] && [ "$has_approval_flag" -eq 0 ]; then
-      CMD+=(--ask-for-approval "$SB_CODEX_APPROVAL")
+      CMD+=(--ask-for-approval "$SB_CODEX_APPROVAL_POLICY")
     fi
-    echo "[sb] Codex internal sandbox: ${SB_CODEX_SANDBOX}"
+    echo "[sb] Codex internal sandbox: ${SB_CODEX_SANDBOX_MODE}"
     echo "[sb] Codex bypass approvals+sandbox: ${SB_CODEX_BYPASS_SANDBOX}"
     if [ "${SB_CODEX_BYPASS_SANDBOX}" = "0" ]; then
-      echo "[sb] Codex approval policy: ${SB_CODEX_APPROVAL}"
+      echo "[sb] Codex approval policy: ${SB_CODEX_APPROVAL_POLICY}"
     fi
   fi
 fi
