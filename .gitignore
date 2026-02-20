@@ -26,6 +26,9 @@ state_5.sqlite-wal
 
 # Skill folder local artifacts
 skills/.DS_Store
+skills/.system/.codex-system-skills.marker
+skills/.system/skill-creator/SKILL.md
+skills/.system/skill-creator/references/openai_yaml.md
 
 # Python cache
 __pycache__/
