@@ -15,6 +15,10 @@ Likely cause:
 - `SB_SECCOMP=default`: uses Docker engine default seccomp profile.
 - `SB_SECCOMP=unconfined`: uses `seccomp=unconfined` (debug only).
 
+Invocation note:
+- Use `./bin/sb` (or `sb`) to launch Codex UI mode.
+- `sb docker` is kept as a legacy alias to the same UI mode.
+
 ## A/B verification steps
 Run from the repo root (`~/.codex`).
 
