@@ -7,9 +7,9 @@
 - Bot YAML input artifact: `das-decision-tree.yaml` (approved decision tree + copy)
 
 ## Git / branches
-- Repo was initialized here; branches exist: `main`, `dev`, `impl/whatsapp-frontdesk-mvp`
-- Work must happen on `impl/whatsapp-frontdesk-mvp` per spec discipline
-- Last commits already pushed on `impl/whatsapp-frontdesk-mvp`
+- Repo was initialized here; legacy implementation branches still exist, but the active working branch is `dev`
+- Ongoing maintenance and validation changes should be made on `dev`
+- Keep legacy `impl/*` branch references only as historical context in old logs/proofs
 
 ## Push/auth gotchas
 - Global git config rewrites `https://github.com/` to SSH:
@@ -35,7 +35,7 @@
 
 ## Local testing notes (WhatsApp + FrontDesk)
 - Runtime dependencies: `requirements.txt` now includes `uvicorn[standard]` so `/realtime/ws` works in local runs (WebSockets).
-- DB: MySQL is required (see SPEC). Typical local DB name: `chatbot_mvp`.
+- DB: MySQL is required (see SPEC). Current local compose default DB name: `frontdesk`.
 - Migrations: run `alembic upgrade head` after setting `DATABASE_URL`.
 - Users: there is no “create user” API; seed at least `2` agents + `1` admin in table `users` to log into `/`.
   - Password hashing helper: `app.security.hash_password()`.
@@ -49,6 +49,7 @@
   - If running `APP_ENV=staging|production`, also set: `WHATSAPP_VERIFY_TOKEN`, `WHATSAPP_APP_SECRET`.
 - Ngrok testing pattern (optional):
   - Run locally on a fixed port (e.g. `8010`) and expose via `ngrok http <port>`.
+  - In this environment, `NGROK_AUTHTOKEN` is available as an env var; `ngrok http <port>` can run without first writing `~/.config/ngrok/ngrok.yml`.
   - Dispatcher should forward webhook payloads to `https://<ngrok-host>/webhooks/whatsapp` (note plural `webhooks`).
 - WhatsApp Cloud “number health” gotcha:
   - A phone can receive WhatsApp messages (two ticks) but still not deliver Cloud webhooks if the Cloud phone verification is not current.

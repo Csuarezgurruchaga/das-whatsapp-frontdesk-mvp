@@ -22,4 +22,4 @@ Last updated: 2026-02-03
 - Acceptance run checklist is currently waived pending environment access.
 
 ## Safe resume instructions
-- Stay on impl/whatsapp-frontdesk-mvp; run the checklist in `docs/specs/whatsapp-frontdesk-mvp/DEPLOYMENT.md` and remove waivers when executed.
+- Stay on `dev`; run the checklist in `docs/specs/whatsapp-frontdesk-mvp/DEPLOYMENT.md` and remove waivers when executed.

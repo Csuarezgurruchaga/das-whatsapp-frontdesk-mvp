@@ -28,6 +28,14 @@ from .models import (
 )
 
 
+def _sqlite_next_bigint_id(session: Session, model: type) -> int | None:
+    bind = session.get_bind()
+    if bind.dialect.name != "sqlite":
+        return None
+    next_id_stmt = select(func.coalesce(func.max(model.id), 0))
+    return int(session.scalar(next_id_stmt) or 0) + 1
+
+
 def create_conversation(
     session: Session,
     *,
@@ -37,6 +45,7 @@ def create_conversation(
     previous_conversation_id: int | None = None,
 ) -> Conversation:
     conversation = Conversation(
+        id=_sqlite_next_bigint_id(session, Conversation),
         contact_id=contact_id,
         state=state,
         assigned_to=assigned_to,
@@ -174,6 +183,7 @@ def create_contact(
     display_name: str | None = None,
 ) -> Contact:
     contact = Contact(
+        id=_sqlite_next_bigint_id(session, Contact),
         whatsapp_number=whatsapp_number,
         display_name=display_name,
     )
@@ -191,6 +201,7 @@ def append_message(
     whatsapp_message_id: str | None = None,
 ) -> Message:
     message = Message(
+        id=_sqlite_next_bigint_id(session, Message),
         conversation_id=conversation_id,
         direction=direction,
         sender_type=sender_type,
@@ -297,6 +308,7 @@ def create_conversation_event(
         raise ValueError("conversation_id is required for non-login events")
 
     event = ConversationEvent(
+        id=_sqlite_next_bigint_id(session, ConversationEvent),
         conversation_id=conversation_id,
         type=event_type,
         actor_user_id=actor_user_id,
@@ -331,15 +343,8 @@ def create_conversation_deletion_event(
     reason: str | None = None,
     created_at: datetime | None = None,
 ) -> ConversationDeletionEvent:
-    bind = session.get_bind()
-    if bind.dialect.name == "sqlite":
-        next_id_stmt = select(func.coalesce(func.max(ConversationDeletionEvent.id), 0))
-        next_id = int(session.scalar(next_id_stmt) or 0) + 1
-    else:
-        next_id = None
-
     event = ConversationDeletionEvent(
-        id=next_id,
+        id=_sqlite_next_bigint_id(session, ConversationDeletionEvent),
         conversation_id=conversation_id,
         actor_user_id=actor_user_id,
         reason=reason,
@@ -379,6 +384,7 @@ def create_message_receipt(
         raise ValueError("message_id or whatsapp_message_id is required")
 
     receipt = MessageReceipt(
+        id=_sqlite_next_bigint_id(session, MessageReceipt),
         message_id=message_id,
         whatsapp_message_id=whatsapp_message_id,
         status=status,
@@ -437,6 +443,7 @@ def create_attachment_metadata(
     created_by: int,
 ) -> AttachmentMetadata:
     attachment = AttachmentMetadata(
+        id=_sqlite_next_bigint_id(session, AttachmentMetadata),
         conversation_id=conversation_id,
         message_id=message_id,
         attachment_id=attachment_id,
@@ -568,14 +575,8 @@ def create_taxonomy_tag(
     name: str,
     created_by: int,
 ) -> TaxonomyTag:
-    bind = session.get_bind()
-    if bind.dialect.name == "sqlite":
-        next_id_stmt = select(func.coalesce(func.max(TaxonomyTag.id), 0))
-        next_id = int(session.scalar(next_id_stmt) or 0) + 1
-    else:
-        next_id = None
     tag = TaxonomyTag(
-        id=next_id,
+        id=_sqlite_next_bigint_id(session, TaxonomyTag),
         name=name,
         is_archived=False,
         created_by=created_by,
@@ -655,6 +656,7 @@ def create_user_session(
     expires_at: datetime,
 ) -> UserSession:
     user_session = UserSession(
+        id=_sqlite_next_bigint_id(session, UserSession),
         session_id=session_id,
         user_id=user_id,
         expires_at=expires_at,
@@ -697,6 +699,7 @@ def upsert_read_state(
     read_state = session.scalar(stmt)
     if read_state is None:
         read_state = ConversationReadState(
+            id=_sqlite_next_bigint_id(session, ConversationReadState),
             conversation_id=conversation_id,
             user_id=user_id,
         )

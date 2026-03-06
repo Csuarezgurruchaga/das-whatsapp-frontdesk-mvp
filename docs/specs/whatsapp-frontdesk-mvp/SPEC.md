@@ -45,7 +45,7 @@ Build an on‑premise compatible system that integrates with the WhatsApp Busine
 - Realtime choice: WebSockets (primary) for message/list updates (no typing/presence in MVP).
 - Authentication choice: server-side sessions with secure cookies.
 - Backend: Python 3.11+ with FastAPI.
-- Database: MySQL (dedicated database `chatbot_mvp` with a dedicated, least-privileged user).
+- Database: MySQL (dedicated database; current local compose default is `frontdesk`, with a dedicated, least-privileged user).
 - Persistence: SQLAlchemy 2.0 ORM + Alembic migrations (versioned).
 - DB driver: PyMySQL (default), with the option to migrate to `mysqlclient` if required.
 - WhatsApp integration: WhatsApp Business Cloud API (webhook inbound + outbound send).

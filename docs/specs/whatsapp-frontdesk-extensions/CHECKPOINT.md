@@ -23,7 +23,7 @@ Last updated: 2026-02-06
 - Keep reverse-proxy `X-Accel-Redirect` no-streaming contract unchanged.
 
 ## Safe resume
-- Checkout `impl/whatsapp-frontdesk-extensions`.
+- Checkout `dev`.
 - Execute local baseline checks:
   - `.venv/bin/python -m unittest discover -s tests -v`
   - `node --check app/static/app.js`

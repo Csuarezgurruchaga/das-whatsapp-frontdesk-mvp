@@ -18,12 +18,12 @@ depends_on = None
 
 
 def upgrade() -> None:
-    op.alter_column(
-        "conversation_events",
-        "conversation_id",
-        existing_type=sa.BigInteger(),
-        nullable=True,
-    )
+    with op.batch_alter_table("conversation_events") as batch_op:
+        batch_op.alter_column(
+            "conversation_id",
+            existing_type=sa.BigInteger(),
+            nullable=True,
+        )
 
     op.create_table(
         "user_sessions",
@@ -53,9 +53,9 @@ def downgrade() -> None:
     op.drop_index("ix_user_sessions_session_id", table_name="user_sessions")
     op.drop_table("user_sessions")
 
-    op.alter_column(
-        "conversation_events",
-        "conversation_id",
-        existing_type=sa.BigInteger(),
-        nullable=False,
-    )
+    with op.batch_alter_table("conversation_events") as batch_op:
+        batch_op.alter_column(
+            "conversation_id",
+            existing_type=sa.BigInteger(),
+            nullable=False,
+        )
