@@ -226,6 +226,9 @@ def generate_conversation_export_zip(
             )
 
         os.replace(temp_path, final_path)
+        # X-Accel-Redirect serves exports from a separate nginx container, so
+        # the final ZIP must be world-readable on the shared volume.
+        os.chmod(final_path, 0o644)
     finally:
         if temp_path is not None and temp_path.exists():
             temp_path.unlink(missing_ok=True)

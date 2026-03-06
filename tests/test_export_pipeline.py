@@ -4,6 +4,7 @@ from dataclasses import replace
 from datetime import datetime, timezone
 import json
 from pathlib import Path
+import stat
 from tempfile import TemporaryDirectory
 import unittest
 from unittest.mock import patch
@@ -142,6 +143,7 @@ class TestExportPipeline(unittest.TestCase):
 
             zip_path = Path(result.absolute_path)
             self.assertTrue(zip_path.exists())
+            self.assertEqual(stat.S_IMODE(zip_path.stat().st_mode), 0o644)
             self.assertEqual(
                 result.storage_relpath,
                 f"{self.conversation.id}/conversation-{self.conversation.id}-exp001.zip",
