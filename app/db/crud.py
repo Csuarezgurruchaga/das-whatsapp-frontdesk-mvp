@@ -33,7 +33,13 @@ def _sqlite_next_bigint_id(session: Session, model: type) -> int | None:
     if bind.dialect.name != "sqlite":
         return None
     next_id_stmt = select(func.coalesce(func.max(model.id), 0))
-    return int(session.scalar(next_id_stmt) or 0) + 1
+    persisted_max = int(session.scalar(next_id_stmt) or 0)
+    pending_ids = [
+        int(obj.id)
+        for obj in session.new
+        if isinstance(obj, model) and getattr(obj, "id", None) is not None
+    ]
+    return max([persisted_max, *pending_ids]) + 1
 
 
 def create_conversation(

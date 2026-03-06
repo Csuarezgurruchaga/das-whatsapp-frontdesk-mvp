@@ -85,6 +85,41 @@ class TestSqliteBigIntFallbacks(unittest.TestCase):
         self.db.flush()
         self.assertEqual(message.id, 1)
 
+    def test_multiple_messages_before_flush_get_distinct_sqlite_ids(self) -> None:
+        contact = crud.create_contact(
+            self.db,
+            whatsapp_number="5491112345681",
+            display_name="Marta",
+        )
+        self.db.flush()
+
+        conversation = crud.create_conversation(
+            self.db,
+            contact_id=contact.id,
+            state=ConversationState.CHATBOT,
+        )
+        self.db.flush()
+
+        first = crud.append_message(
+            self.db,
+            conversation_id=conversation.id,
+            direction=MessageDirection.INBOUND,
+            sender_type=SenderType.USER,
+            text="uno",
+            whatsapp_message_id="wamid.multi.1",
+        )
+        second = crud.append_message(
+            self.db,
+            conversation_id=conversation.id,
+            direction=MessageDirection.OUTBOUND,
+            sender_type=SenderType.BOT,
+            text="dos",
+            whatsapp_message_id="wamid.multi.2",
+        )
+        self.db.flush()
+        self.assertEqual(first.id, 1)
+        self.assertEqual(second.id, 2)
+
     def test_receipts_and_attachments_assign_sqlite_ids(self) -> None:
         contact = crud.create_contact(
             self.db,
