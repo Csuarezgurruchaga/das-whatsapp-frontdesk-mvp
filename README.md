@@ -72,6 +72,7 @@ Características:
 - app corriendo como usuario no root (`uid/gid 10001`)
 - entrypoint operativo recomendado: `make das-prod-up`
 - si una release trae una migración no backward-compatible, usar `make das-prod-up-maintenance`
+- imagen publicada actual para el bundle Debian: `ghcr.io/csuarezgurruchaga/chatbot-das:2026-04-17-1`
 
 ## Cómo correr local
 

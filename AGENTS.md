@@ -268,6 +268,14 @@
 
 -
 - date: 2026-04-17
+- context: first published production image for the Debian bundle
+- problem: The repo and docs were ready for server deploy, but there was not yet a real immutable artifact published to a registry, which left `APP_IMAGE` as documentation only and not an actually deployable reference.
+- solution: Built `Dockerfile.prod` from commit `e2c0e2a` and published the first Debian bundle image to GHCR as `ghcr.io/csuarezgurruchaga/chatbot-das:2026-04-17-1`.
+- notes: The GitHub auth on the host initially lacked `write:packages`; after `gh auth refresh -h github.com -s write:packages`, Docker push succeeded using a temporary `DOCKER_CONFIG` under `/tmp` because the default credential helper was blocked by sandbox permissions.
+- proof: local image id `sha256:8f8d8fc433ff6d53547d301f590cddd7275bf5a76a7689410446c1dffcc9a5ce`; published digest `sha256:5565f82ca267df677577808ea05b0f03da16d7cb72949a20d5bd12eedb2e0820`
+
+-
+- date: 2026-04-17
 - context: local prod-like acceptance rerun with real dispatcher cutover to DAS
 - problem: The repo docs still showed the MVP acceptance run as waived, even though the system had already been exercised end-to-end with real WhatsApp traffic routed temporarily into DAS local.
 - solution: Executed A0-A7 core flows against DAS local using MySQL 8, signed webhooks, ngrok HTTPS, and a temporary dispatcher route for `phone_number_id 972301799307809`, then restored the dispatcher exactly to its previous `ROUTES_JSON`. Evidence now lives in the updated `docs/specs/whatsapp-frontdesk-mvp/DEPLOYMENT.md` and `CHECKPOINT.md`.

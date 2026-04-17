@@ -43,16 +43,22 @@ The production app image runs as UID/GID `10001`, so `attachments` and `exports`
 Build from the repo root:
 
 ```bash
-docker build -f Dockerfile.prod -t ghcr.io/example/chatbot-das:2026-04-17-1 .
+docker build -f Dockerfile.prod -t ghcr.io/csuarezgurruchaga/chatbot-das:2026-04-17-1 .
 ```
 
 Push the image to the registry you use:
 
 ```bash
-docker push ghcr.io/example/chatbot-das:2026-04-17-1
+docker push ghcr.io/csuarezgurruchaga/chatbot-das:2026-04-17-1
 ```
 
 Use a new immutable tag for every deploy. Do not deploy `latest`.
+
+Current published example from this rollout:
+
+```bash
+ghcr.io/csuarezgurruchaga/chatbot-das:2026-04-17-1
+```
 
 ## 3. Prepare the deployment bundle on the server
 
