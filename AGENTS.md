@@ -3,7 +3,7 @@
 ## Project essentials
 - Spec slug: `whatsapp-frontdesk-mvp`
 - Source of truth: `docs/specs/whatsapp-frontdesk-mvp/{SPEC,PLAN,TASKS,ACCEPTANCE}.md`
-- Current task: deploy preparation / post-acceptance follow-up
+- Current task: deployment hardening + repo cleanup/documentation follow-up
 - Bot YAML input artifact: `das-decision-tree.yaml` (approved decision tree + copy)
 
 ## Git / branches
@@ -26,7 +26,7 @@
 ## Execution status reminders
 - `TASKS.md` Execution status updated to `DONE`, `Progress: 13/13`
 - Acceptance checklist is in `docs/specs/whatsapp-frontdesk-mvp/DEPLOYMENT.md`
-- Real local prod-like acceptance is complete as of `2026-03-06` on an isolated stack: `Docker + MySQL + Nginx + HTTPS/ngrok`
+- Real local prod-like acceptance is complete as of `2026-04-17` on an isolated stack: `Docker + MySQL + Nginx + HTTPS/ngrok`
 - Validated in that run:
   - login with secure cookie
   - webhook verify + signed webhook POST
@@ -37,7 +37,30 @@
   - attachment upload/download/view via proxy
   - export download via proxy
   - UI time rendering in `America/Argentina/Buenos_Aires`
+- Debian server deploy bundle now exists:
+  - `Makefile`
+  - `Dockerfile.prod`
+  - `docker-compose.prod.yml`
+  - `nginx.prod.conf`
+  - `.env.prod.example`
+  - `DEPLOYMENT_PROD.md`
 - `CHECKPOINT.md` exists and must be kept up-to-date after each chunk
+
+## Environment map
+- Local development:
+  - `docker-compose.local.yml`
+  - `Dockerfile.local`
+  - `.env.staging.local.example`
+  - bind-mounted repo source; fastest loop for code/UI work
+- Local prod-like acceptance:
+  - same local stack, but with real WhatsApp credentials, `APP_ENV=staging`, HTTPS/ngrok, and optionally a temporary dispatcher cutover for real inbound
+  - use sparingly; this is not the safe default
+- Production Debian:
+  - `Makefile`
+  - `Dockerfile.prod`
+  - `docker-compose.prod.yml`
+  - `nginx.prod.conf`
+  - persistent host paths under `/srv/chatbot-das`
 
 ## Config conventions (T0.1 done)
 - Config artifacts live under `./config/`
@@ -194,3 +217,59 @@
 - problem: Export generation failed in MySQL with `LookupError: 'sent' is not among the defined enum values` due to an enum mapping mismatch for `attachment_status`.
 - solution: Updated `AttachmentMetadata.status` enum mapping to use `.value` strings (`uploading/sent/failed`) and added a regression unit test.
 - proof: `docker compose -f docker-compose.local.yml exec app python -c "... generate_conversation_export_zip(...)"` succeeds; `python -m unittest -v tests/test_enum_mappings.py`
+
+-
+- date: 2026-04-16
+- context: local Docker recovery after long freeze / UI inspection
+- problem: `chatbot-das-mysql-1` failed to start with `No space left on device`, leaving the UI reachable at `/` but login effectively blocked because the DB never came up.
+- solution: Freed Docker Desktop storage with a conservative cleanup that kept the active stack and harness images intact: `docker builder prune -af`, `docker image prune -f`, and `docker container prune -f`. This reclaimed enough space for `mysql:8` to start normally again; after recovery the local DB still contained `3` users (`admin`, `agent1`, `agent2`) and `1` conversation in state `CERRADO`.
+- notes: Do not start by pruning volumes; the immediate issue was build cache + dangling images + exited containers. If the same failure reappears, check `docker system df` before touching app code.
+- proof: `docker system df`; `docker compose -f docker-compose.local.yml up -d mysql`; `docker compose -f docker-compose.local.yml ps`; `docker compose -f docker-compose.local.yml exec -T mysql mysql -uwfd -pwfdpass -D frontdesk -e "SELECT id, username, role FROM users ORDER BY id; SELECT id, state, assigned_to FROM conversations ORDER BY id;"`
+
+-
+- date: 2026-04-16
+- context: `app/static/{styles.css,index.html}` layout regression while inspecting the Docker-served UI
+- problem: The authenticated FrontDesk screen looked horizontally broken because `#main-view` inherited the generic `.view` rule (`display:flex`, centered row layout, `padding:32px`), so `header`, `tabs`, and the 3-column grid rendered side-by-side instead of stacking vertically. Browser cache could also keep serving the old CSS after the fix because the static asset URLs were unversioned.
+- solution: Added a dedicated `.main-view` rule (`display:block; width:100%; padding:0;`) so the main screen uses normal block flow, and versioned the static asset URLs in `index.html` (`styles.css?v=20260416`, `app.js?v=20260416`) to force clients to pick up the corrected assets with a normal refresh.
+- notes: This was a real CSS/layout bug, not a mismatch against an older mockup. The server was serving the correct stylesheet immediately via the Docker bind mount; the stale render persisted only in browser cache until the asset URL changed.
+- proof: `curl -s http://127.0.0.1:8080/static/styles.css | rg -n "\\.main-view|display: block|padding: 0"`; Playwright computed style for `#main-view` after reload showed `display: block`, `padding: 0px`, `layoutCols: 280px 856px 280px`; screenshot: `chatbot-das-layout-fixed-validated.png`
+
+-
+- date: 2026-04-16
+- context: `app/static/{index.html,styles.css,app.js}` visual redesign toward the older DAS backoffice look
+- problem: The existing UI had the right functionality but the wrong visual language for the intended product direction: dark product-style chrome, weak resemblance to the legacy DAS operator console, and logout/taxonomy exposed as permanent top-level actions instead of secondary operator controls.
+- solution: Reworked the authenticated frontend into a light DAS-inspired 3-column backoffice layout with green/teal header, centered DAS wordmark, queue-state toolbar on the left, conversation header actions at the top of the chat column, detail accordions on the right, and a user dropdown containing `Taxonomia` + `Cerrar sesion`. Kept all existing backend contracts and frontend actions intact; changes are presentation/layout only.
+- notes: Static asset cache-busting is necessary during UI work because Docker serves bind-mounted files immediately but browsers may keep stale `/static/styles.css` and `/static/app.js` aggressively. Keep querystring versioning on those assets whenever the visual shell changes materially.
+- proof: `node --check app/static/app.js`; `git diff --check`; Playwright screenshots `chatbot-das-redesign-authenticated-v4.png` and `chatbot-das-user-menu-open.png`
+
+-
+- date: 2026-04-17
+- context: production packaging for Debian single-host deploy
+- problem: The repo had only a local development compose with bind-mounted source and no production bundle for a Debian server, which made deployment ambiguous and risked treating the dev image as if it were a portable release artifact.
+- solution: Added a production deployment bundle composed of `Makefile`, `.dockerignore`, `Dockerfile.prod`, `docker-compose.prod.yml`, `nginx.prod.conf`, `.env.prod.example`, and `DEPLOYMENT_PROD.md`. The prod topology is `app + nginx + mysql` on one Debian host, with host-level bind mounts under `/srv/chatbot-das` for MySQL data, attachments, exports, env, and TLS certs; the app is deployed as an immutable image tag and migrations run explicitly after startup.
+- notes: Production intentionally does not bind mount repo source. Persistence depends on host paths, not on the container filesystem or the image. Keep using immutable image tags and never deploy `latest`.
+- proof: `docker compose -f docker-compose.prod.yml config`; `docker run --rm -v "$PWD/nginx.prod.conf:/etc/nginx/nginx.conf:ro" -v /tmp/chatbot-das-certs:/etc/nginx/certs:ro nginx:alpine nginx -t`
+
+-
+- date: 2026-04-17
+- context: reviewer follow-up on Debian production bundle
+- problem: The first cut of the prod bundle exposed traffic before migrations completed, used floating infra image tags, reported app health from `/` without proving DB readiness, and duplicated DB connection parameters between `DATABASE_URL` and `MYSQL_*`.
+- solution: Tightened the bundle so `docker-compose.prod.yml` derives `DATABASE_URL` from `MYSQL_*`, healthchecks the app with a live DB query, requires explicit pinned `MYSQL_IMAGE`/`NGINX_IMAGE`, and `make das-prod-up` now stops `nginx`, updates `app`, runs Alembic, and only then exposes traffic again.
+- notes: The bundle still assumes an embedded MySQL topology. If the repo later moves to an external DB, revisit the composed `DATABASE_URL` rule and the deploy targets.
+- proof: `docker compose --env-file .env.prod.example -f docker-compose.prod.yml config`; `make -n das-prod-up APP_ENV_FILE=.env.prod.example RUNTIME_ROOT=/tmp/chatbot-das-prod`
+
+-
+- date: 2026-04-17
+- context: second hardening pass on the Debian production bundle after DevOps re-review
+- problem: The first remediation still left operator-risk edges: `das-prod-restart` could bypass Alembic, the main deploy path achieved safety by forcing downtime through `nginx` stop/start, recovery targets (`logs`, `ps`, `down`) were blocked by TLS-file prechecks, and the app container still ran as root against writable host-mounted storage.
+- solution: Reworked `Makefile` so migrations run through a one-off app container before recreating `app`/`nginx`, added a lighter `das-prod-stack-check` for recovery-safe targets, and hardened `Dockerfile.prod` to run as UID/GID `10001`. `das-prod-init` now prepares writable attachment/export directories for that non-root runtime.
+- notes: In local validation, compose interpolation must receive the same overrides as the Make variables, so `DOCKER_COMPOSE` now exports `APP_ENV_FILE`, `MYSQL_DATA_DIR`, `ATTACHMENTS_HOST_DIR`, `EXPORTS_HOST_DIR`, and `TLS_CERTS_DIR` before invoking `docker compose`.
+- proof: `APP_ENV_FILE=.env.prod.example docker compose --env-file .env.prod.example -f docker-compose.prod.yml config`; `make -n das-prod-up APP_ENV_FILE=.env.prod.example RUNTIME_ROOT=/tmp/chatbot-das-prod`; `docker run --rm --add-host app:127.0.0.1 -v "$PWD/nginx.prod.conf:/etc/nginx/nginx.conf:ro" -v /tmp/chatbot-das-certs:/etc/nginx/certs:ro nginx:alpine nginx -t`; `git diff --check`
+
+-
+- date: 2026-04-17
+- context: local prod-like acceptance rerun with real dispatcher cutover to DAS
+- problem: The repo docs still showed the MVP acceptance run as waived, even though the system had already been exercised end-to-end with real WhatsApp traffic routed temporarily into DAS local.
+- solution: Executed A0-A7 core flows against DAS local using MySQL 8, signed webhooks, ngrok HTTPS, and a temporary dispatcher route for `phone_number_id 972301799307809`, then restored the dispatcher exactly to its previous `ROUTES_JSON`. Evidence now lives in the updated `docs/specs/whatsapp-frontdesk-mvp/DEPLOYMENT.md` and `CHECKPOINT.md`.
+- notes: The run proved the real inbound/outbound path and core operator workflow, but it did not force blocked-handoff outside schedule, `MESSAGE_SENT_FAILED`, or receipt statuses `read` / `failed`.
+- proof: local DB evidence on conversations `5` and `6`, signed webhook 401 negative probe, duplicate replay with unchanged message count, dispatcher restore to Kleiman route

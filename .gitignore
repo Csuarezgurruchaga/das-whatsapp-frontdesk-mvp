@@ -1,7 +1,7 @@
 .DS_Store
 .Rhistory
 
-.venv/
+.venv*/
 __pycache__/
 *.pyc
 
@@ -12,6 +12,7 @@ storage/
 # Local env files (use *.example templates instead)
 .env.staging.local
 .env.*.local
+.env.prod
 
 # Local helper scripts (do not commit tokens)
 scripts/git-http.sh

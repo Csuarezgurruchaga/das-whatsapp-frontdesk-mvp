@@ -2,7 +2,7 @@
 
 ## Acceptance run checklist
 
-Last updated: 2026-02-03
+Last updated: 2026-04-17
 
 ### Scope
 - Validate ACCEPTANCE.md criteria A0–A7.
@@ -15,8 +15,36 @@ Last updated: 2026-02-03
 - `BOT_MENU_YAML_PATH` points to the approved `bot.yaml`.
 
 ### Execution record
-- Local: WAIVED (no runtime/credentials in this environment)
-- Staging/on-prem: WAIVED (no access in this environment)
+- Local prod-like: PARTIAL PASS on `2026-04-17`
+- Staging/on-prem: PENDING
+
+### Local prod-like execution summary (`2026-04-17`)
+- Runtime:
+  - Docker + MySQL 8 + Nginx
+  - `APP_ENV=staging`
+  - HTTPS via `ngrok`
+  - signed webhook validation enabled
+- Real WhatsApp path:
+  - temporary dispatcher cutover to DAS local
+  - real inbound from test handset
+  - real bot replies from DAS
+  - dispatcher restored after the run
+- Proven in this run:
+  - A0 browser smoke
+  - A1 YAML routing + invalid input
+  - A2 entry to `EN_ESPERA` + one-shot waiting follow-up
+  - A3 atomic take
+  - A4 agent send/receive
+  - A5 admin reassign + reply safety
+  - A6 close + new conversation after close
+  - A7 invalid signature rejection + duplicate delivery idempotency
+- Observed audit/receipts in DB:
+  - `TAKEN`, `REASSIGNED`, `CLOSED`, `LOGIN_SUCCESS`, `LOGIN_FAIL`
+  - receipt statuses `sent`, `delivered`
+- Still not explicitly observed in that run:
+  - blocked handoff outside business hours
+  - `MESSAGE_SENT_FAILED`
+  - receipt statuses `read`, `failed`
 
 ### Checklist template (run per environment)
 #### A0 - Browser smoke (web)
@@ -86,8 +114,10 @@ Last updated: 2026-02-03
   - Confirm audit events are persisted in `conversation_events` for: TAKEN, REASSIGNED, CLOSED, MESSAGE_SENT_FAILED, LOGIN_SUCCESS, LOGIN_FAIL.
   - Confirm WhatsApp receipts are persisted in `message_receipts` (sent/delivered/read/failed).
 
-### Waiver log
-- 2026-02-03 — A0–A7 waived in this environment (no runtime, DB, or WhatsApp credentials available).
+### Waiver / residual log
+- 2026-02-03 — original checklist was waived due missing runtime/credentials.
+- 2026-04-17 — waiver replaced by a real local prod-like execution record.
+- 2026-04-17 — residual gaps kept explicit: blocked-handoff outside schedule, `MESSAGE_SENT_FAILED`, and receipt statuses `read` / `failed` were not forced during the run.
 
 ### Rollback procedure
 1) Identify the last known good release (image tag or commit) and corresponding DB snapshot (if available).

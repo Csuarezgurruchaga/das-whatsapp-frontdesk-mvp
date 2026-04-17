@@ -1,5 +1,6 @@
 const state = {
   currentUser: null,
+  sessionToken: 0,
   activeTab: "CHATBOT",
   conversationsByState: {
     CHATBOT: [],
@@ -13,7 +14,15 @@ const state = {
   taxonomyTags: [],
   taxonomyEnabled: false,
   ws: null,
+  wsShouldReconnect: false,
+  wsReconnectTimer: null,
 };
+
+const EMPTY_CONVERSATION_BUCKETS = Object.freeze({
+  CHATBOT: [],
+  EN_ESPERA: [],
+  ASIGNADO: [],
+});
 
 const MAX_UPLOAD_BYTES = 100 * 1024 * 1024;
 const IMAGE_MAX_UPLOAD_BYTES = 5 * 1024 * 1024;
@@ -76,6 +85,9 @@ const els = {
   mainView: document.getElementById("main-view"),
   loginForm: document.getElementById("login-form"),
   loginError: document.getElementById("login-error"),
+  userMenu: document.getElementById("user-menu"),
+  userMenuTrigger: document.getElementById("user-menu-trigger"),
+  userMenuPanel: document.getElementById("user-menu-panel"),
   taxonomyBtn: document.getElementById("taxonomy-btn"),
   taxonomyModal: document.getElementById("taxonomy-modal"),
   taxonomyModalClose: document.getElementById("taxonomy-modal-close"),
@@ -90,7 +102,10 @@ const els = {
   listCount: document.getElementById("list-count"),
   conversationList: document.getElementById("conversation-list"),
   chatTitle: document.getElementById("chat-title"),
+  chatAvatar: document.getElementById("chat-avatar"),
   chatMeta: document.getElementById("chat-meta"),
+  chatActions: document.getElementById("chat-actions"),
+  chatHistoryBanner: document.getElementById("chat-history-banner"),
   chatBody: document.getElementById("chat-body"),
   detailBody: document.getElementById("detail-body"),
   sendBtn: document.getElementById("send-btn"),
@@ -109,10 +124,55 @@ function setView(view) {
   if (view === "login") {
     els.loginView.classList.remove("hidden");
     els.mainView.classList.add("hidden");
+    closeUserMenu();
   } else {
     els.loginView.classList.add("hidden");
     els.mainView.classList.remove("hidden");
   }
+}
+
+function resetConversationBuckets() {
+  state.conversationsByState = {
+    CHATBOT: [...EMPTY_CONVERSATION_BUCKETS.CHATBOT],
+    EN_ESPERA: [...EMPTY_CONVERSATION_BUCKETS.EN_ESPERA],
+    ASIGNADO: [...EMPTY_CONVERSATION_BUCKETS.ASIGNADO],
+  };
+}
+
+function advanceSessionToken() {
+  state.sessionToken += 1;
+  return state.sessionToken;
+}
+
+function resetComposerState() {
+  els.messageInput.value = "";
+  els.composerError.textContent = "";
+  els.attachmentInput.value = "";
+  els.attachBtn.disabled = false;
+  els.sendBtn.disabled = false;
+}
+
+function clearWsReconnectTimer() {
+  if (state.wsReconnectTimer) {
+    window.clearTimeout(state.wsReconnectTimer);
+    state.wsReconnectTimer = null;
+  }
+}
+
+function isActiveComposerContext(sessionToken, conversationId) {
+  return (
+    sessionToken === state.sessionToken &&
+    !!state.currentUser &&
+    state.activeConversation?.conversation_id === conversationId
+  );
+}
+
+function isActiveTaxonomyContext(sessionToken) {
+  return sessionToken === state.sessionToken && !!state.currentUser && canManageTaxonomy();
+}
+
+function isCurrentSession(sessionToken) {
+  return sessionToken === state.sessionToken && !!state.currentUser;
 }
 
 async function apiFetch(path, options = {}) {
@@ -175,28 +235,46 @@ async function handleLogout() {
   } catch (err) {
     // Ignore logout errors.
   }
+  advanceSessionToken();
   state.currentUser = null;
+  resetConversationBuckets();
   state.activeConversation = null;
   state.activeMessages = [];
   state.pendingAttachmentMessages = [];
+  state.agentOptions = [];
   state.taxonomyTags = [];
   state.taxonomyEnabled = false;
+  state.wsShouldReconnect = false;
+  clearWsReconnectTimer();
   closeTaxonomyModal();
   closeAttachmentPreview();
   disconnectWs();
+  resetComposerState();
+  renderTabs();
+  renderConversationList();
+  renderDetails();
+  renderChat([]);
   setView("login");
 }
 
 function initAfterLogin() {
+  advanceSessionToken();
   els.userChip.textContent = `${state.currentUser.username} (${state.currentUser.role})`;
+  resetConversationBuckets();
   state.activeTab = "CHATBOT";
   state.activeConversation = null;
   state.activeMessages = [];
   state.pendingAttachmentMessages = [];
+  state.agentOptions = [];
   state.taxonomyTags = [];
   state.taxonomyEnabled = false;
+  state.wsShouldReconnect = true;
+  clearWsReconnectTimer();
+  resetComposerState();
+  renderDetails();
   renderTabs();
-  loadConversations();
+  renderConversationList();
+  refreshAllLists();
   connectWs();
   if (state.currentUser.role === "admin") {
     loadAgents();
@@ -207,33 +285,73 @@ function initAfterLogin() {
 }
 
 function renderTabs() {
+  if (!state.currentUser) {
+    els.tabs.forEach((tab) => {
+      const stateKey = tab.dataset.state;
+      tab.classList.remove("active");
+      tab.innerHTML = `
+        <span class="tab-inner">
+          <span class="tab-icon" aria-hidden="true">${iconForState(stateKey)}</span>
+          <span class="tab-label">${labelForState(stateKey).toUpperCase()}</span>
+          <span class="tab-count">(0)</span>
+        </span>
+      `;
+    });
+    return;
+  }
   els.tabs.forEach((tab) => {
-    tab.classList.toggle("active", tab.dataset.state === state.activeTab);
+    const stateKey = tab.dataset.state;
+    const count = (state.conversationsByState[stateKey] || []).length;
+    tab.classList.toggle("active", stateKey === state.activeTab);
+    tab.innerHTML = `
+      <span class="tab-inner">
+        <span class="tab-icon" aria-hidden="true">${iconForState(stateKey)}</span>
+        <span class="tab-label">${labelForState(stateKey).toUpperCase()}</span>
+        <span class="tab-count">(${count})</span>
+      </span>
+    `;
   });
 }
 
 async function loadConversations() {
+  const sessionToken = state.sessionToken;
   const stateKey = state.activeTab;
   try {
     const data = await apiFetch(`/conversations?state=${stateKey}`);
+    if (sessionToken !== state.sessionToken || !state.currentUser) {
+      return;
+    }
     state.conversationsByState[stateKey] = data;
+    renderTabs();
     renderConversationList();
   } catch (err) {
+    if (sessionToken !== state.sessionToken) {
+      return;
+    }
+    renderTabs();
     renderConversationList();
   }
 }
 
 async function refreshAllLists() {
+  const sessionToken = state.sessionToken;
   await Promise.all(
     Object.keys(state.conversationsByState).map(async (stateKey) => {
       try {
         const data = await apiFetch(`/conversations?state=${stateKey}`);
+        if (sessionToken !== state.sessionToken || !state.currentUser) {
+          return;
+        }
         state.conversationsByState[stateKey] = data;
       } catch (err) {
         // Keep old list if fetch fails.
       }
     })
   );
+  if (sessionToken !== state.sessionToken || !state.currentUser) {
+    return;
+  }
+  renderTabs();
   renderConversationList();
 }
 
@@ -251,12 +369,28 @@ function renderConversationList() {
       card.classList.add("active");
     }
 
-    const title = document.createElement("h3");
+    const avatar = document.createElement("div");
+    avatar.className = "conversation-avatar";
+    avatar.textContent = initialsForConversation(item);
+
+    const copy = document.createElement("div");
+    copy.className = "conversation-copy";
+
+    const titleRow = document.createElement("div");
+    titleRow.className = "conversation-title-row";
+
+    const title = document.createElement("div");
+    title.className = "conversation-title";
     title.textContent = item.contact_name || item.contact_number || `#${item.conversation_id}`;
 
+    titleRow.appendChild(title);
+
     const preview = document.createElement("div");
-    preview.className = "muted";
+    preview.className = "conversation-preview";
     preview.textContent = item.last_message_text || "Sin mensajes";
+
+    copy.appendChild(titleRow);
+    copy.appendChild(preview);
 
     const meta = document.createElement("div");
     meta.className = "list-meta";
@@ -273,8 +407,8 @@ function renderConversationList() {
       meta.appendChild(unread);
     }
 
-    card.appendChild(title);
-    card.appendChild(preview);
+    card.appendChild(avatar);
+    card.appendChild(copy);
     card.appendChild(meta);
 
     card.addEventListener("click", () => selectConversation(item.conversation_id));
@@ -284,7 +418,7 @@ function renderConversationList() {
 
   if (list.length === 0) {
     const empty = document.createElement("div");
-    empty.className = "muted";
+    empty.className = "muted list-empty";
     empty.textContent = "No hay conversaciones en este estado.";
     els.conversationList.appendChild(empty);
   }
@@ -294,20 +428,30 @@ async function selectConversation(conversationId) {
   if (!conversationId) {
     return;
   }
+  const sessionToken = state.sessionToken;
   try {
     const detail = await apiFetch(`/conversations/${conversationId}`);
+    if (sessionToken !== state.sessionToken || !state.currentUser) {
+      return;
+    }
     state.activeConversation = detail;
     renderDetails();
-    await loadMessages(conversationId, true);
+    await loadMessages(conversationId, true, sessionToken);
+    if (sessionToken !== state.sessionToken || !state.currentUser) {
+      return;
+    }
     renderConversationList();
   } catch (err) {
     // ignore
   }
 }
 
-async function loadMessages(conversationId, markRead) {
+async function loadMessages(conversationId, markRead, sessionToken = state.sessionToken) {
   const query = markRead ? "?mark_read=true" : "";
   const messages = await apiFetch(`/conversations/${conversationId}/messages${query}`);
+  if (sessionToken !== state.sessionToken || !state.currentUser) {
+    return;
+  }
   state.activeMessages = messages || [];
   renderChat(messages);
 }
@@ -413,89 +557,158 @@ function buildAttachmentBubble(attachment) {
   return wrapper;
 }
 
-function renderDetails() {
-  const detail = state.activeConversation;
-  if (!detail) {
-    els.detailBody.innerHTML = '<p class="muted">Sin conversacion activa.</p>';
-    els.chatTitle.textContent = "Conversacion";
-    els.chatMeta.textContent = "Selecciona una conversacion";
-    return;
-  }
-
+function renderChatHeader(detail) {
   const title = detail.contact_name || detail.contact_number || `#${detail.conversation_id}`;
   els.chatTitle.textContent = title;
-  els.chatMeta.textContent = `Estado: ${labelForState(detail.state)}`;
+  els.chatAvatar.textContent = initialsForConversation(detail);
 
-  const wrapper = document.createElement("div");
-  wrapper.className = "details";
+  const metaLines = [
+    detail.contact_number || "Sin numero",
+    `WhatsApp DAS · ${labelForState(detail.state)}`,
+  ];
+  if (detail.assigned_to_username) {
+    metaLines.push(`Asignado a ${detail.assigned_to_username}`);
+  }
+  els.chatMeta.innerHTML = metaLines
+    .map((line) => `<span class="chat-meta-line">${escapeHtml(line)}</span>`)
+    .join("");
 
-  wrapper.appendChild(detailRow("Contacto", detail.contact_number || "-"));
-  wrapper.appendChild(detailRow("Estado", labelForState(detail.state)));
-  wrapper.appendChild(detailRow("Asignado", detail.assigned_to_username || "Sin asignar"));
-  wrapper.appendChild(detailRow("Ultima actividad", formatDateTime(detail.last_activity_at)));
-  wrapper.appendChild(buildConversationTagsCard(detail));
+  els.chatHistoryBanner.textContent = "Historial reciente de la conversacion seleccionada.";
 
-  const actions = document.createElement("div");
-  actions.className = "detail-actions";
+  const actions = buildChatActions(detail);
+  els.chatActions.innerHTML = "";
+  actions.forEach((node) => els.chatActions.appendChild(node));
+}
+
+function buildChatActions(detail) {
+  const actions = [];
 
   if (detail.state === "EN_ESPERA") {
     const takeBtn = document.createElement("button");
     takeBtn.className = "primary";
     takeBtn.textContent = "Tomar conversacion";
     takeBtn.addEventListener("click", () => takeConversation(detail.conversation_id));
-    actions.appendChild(takeBtn);
+    actions.push(takeBtn);
+    return actions;
   }
 
-  if (detail.state === "ASIGNADO") {
-    const closeBtn = document.createElement("button");
-    closeBtn.className = "ghost";
-    closeBtn.textContent = "Cerrar conversacion";
-    closeBtn.addEventListener("click", () => closeConversation(detail.conversation_id));
-    actions.appendChild(closeBtn);
+  if (detail.state !== "ASIGNADO") {
+    return actions;
   }
 
-  if (state.currentUser && state.currentUser.role === "admin" && detail.state === "ASIGNADO") {
-    const assignSelfBtn = document.createElement("button");
-    assignSelfBtn.className = "primary";
-    assignSelfBtn.textContent = "Asignarme";
-    assignSelfBtn.addEventListener("click", () => reassignConversation(detail.conversation_id, state.currentUser.user_id));
-    actions.appendChild(assignSelfBtn);
+  const closeBtn = document.createElement("button");
+  closeBtn.className = "ghost";
+  closeBtn.textContent = "Cerrar conversacion";
+  closeBtn.addEventListener("click", () => closeConversation(detail.conversation_id));
+  actions.push(closeBtn);
+
+  if (state.currentUser?.role === "admin") {
+    if (detail.assigned_to !== state.currentUser.user_id) {
+      const assignSelfBtn = document.createElement("button");
+      assignSelfBtn.className = "ghost";
+      assignSelfBtn.textContent = "Asignarme";
+      assignSelfBtn.addEventListener("click", () =>
+        reassignConversation(detail.conversation_id, state.currentUser.user_id)
+      );
+      actions.push(assignSelfBtn);
+    }
 
     const select = document.createElement("select");
     select.id = "agent-select";
+    select.setAttribute("aria-label", "Asignar a");
     state.agentOptions.forEach((agent) => {
       const option = document.createElement("option");
       option.value = agent.user_id;
       option.textContent = agent.username;
+      if (detail.assigned_to === agent.user_id) {
+        option.selected = true;
+      }
       select.appendChild(option);
     });
+    actions.push(select);
 
     const reassignBtn = document.createElement("button");
-    reassignBtn.className = "ghost";
-    reassignBtn.textContent = "Reasignar";
+    reassignBtn.className = "primary";
+    reassignBtn.textContent = "Asignar a";
     reassignBtn.addEventListener("click", () => {
       const assigneeId = Number(select.value || 0);
       if (assigneeId) {
         reassignConversation(detail.conversation_id, assigneeId);
       }
     });
-
-    const reassignWrapper = document.createElement("div");
-    reassignWrapper.className = "detail-card";
-    reassignWrapper.appendChild(select);
-    reassignWrapper.appendChild(reassignBtn);
-    actions.appendChild(reassignWrapper);
+    actions.push(reassignBtn);
   }
 
-  if (actions.children.length > 0) {
-    const actionCard = document.createElement("div");
-    actionCard.className = "detail-card";
-    actionCard.appendChild(actions);
-    wrapper.appendChild(actionCard);
+  return actions;
+}
+
+function renderDetails() {
+  const detail = state.activeConversation;
+  if (!detail) {
+    els.detailBody.innerHTML = '<p class="muted">Sin conversacion activa.</p>';
+    els.chatTitle.textContent = "Conversacion";
+    els.chatMeta.textContent = "Selecciona una conversacion";
+    els.chatAvatar.textContent = "D";
+    els.chatActions.innerHTML = "";
+    els.chatHistoryBanner.textContent = "Selecciona una conversacion para ver el historial.";
+    state.activeMessages = [];
+    renderChat([]);
+    return;
   }
+
+  renderChatHeader(detail);
+
+  const wrapper = document.createElement("div");
+  wrapper.className = "details";
+
+  wrapper.appendChild(
+    buildAccordion(
+      "Detalles del contacto",
+      [
+        detailField("Nombre", detail.contact_name || "Sin nombre"),
+        detailField("Numero", detail.contact_number || "-"),
+      ],
+      true
+    )
+  );
+  wrapper.appendChild(
+    buildAccordion(
+      "Detalles de la conversacion",
+      [
+        detailField("Estado", labelForState(detail.state)),
+        detailField("Asignado", detail.assigned_to_username || "Sin asignar"),
+        detailField("Ultima actividad", formatDateTime(detail.last_activity_at)),
+        detailField("Cerrada", detail.closed_at ? formatDateTime(detail.closed_at) : "No"),
+      ],
+      true
+    )
+  );
+  wrapper.appendChild(
+    buildAccordion(
+      "Etiquetas y clasificacion",
+      [buildConversationTagsCard(detail)],
+      true
+    )
+  );
 
   els.detailBody.innerHTML = "";
   els.detailBody.appendChild(wrapper);
+}
+
+function buildAccordion(title, children, open = false) {
+  const accordion = document.createElement("details");
+  accordion.className = "detail-accordion";
+  accordion.open = open;
+
+  const summary = document.createElement("summary");
+  summary.textContent = title;
+  accordion.appendChild(summary);
+
+  const body = document.createElement("div");
+  body.className = "detail-accordion-body";
+  children.forEach((child) => body.appendChild(child));
+  accordion.appendChild(body);
+  return accordion;
 }
 
 function canManageTaxonomy() {
@@ -606,24 +819,52 @@ function detailRow(label, value) {
   return card;
 }
 
+function detailField(label, value) {
+  const field = document.createElement("div");
+  field.className = "detail-field";
+
+  const labelEl = document.createElement("div");
+  labelEl.className = "detail-label";
+  labelEl.textContent = label;
+
+  const valueEl = document.createElement("div");
+  valueEl.className = "detail-value";
+  valueEl.textContent = value;
+
+  field.appendChild(labelEl);
+  field.appendChild(valueEl);
+  return field;
+}
+
 async function sendMessage() {
   if (!state.activeConversation) {
     return;
   }
+  const sessionToken = state.sessionToken;
+  const conversationId = state.activeConversation.conversation_id;
   const text = els.messageInput.value.trim();
   if (!text) {
     return;
   }
   els.composerError.textContent = "";
   try {
-    await apiFetch(`/conversations/${state.activeConversation.conversation_id}/messages`, {
+    await apiFetch(`/conversations/${conversationId}/messages`, {
       method: "POST",
       body: JSON.stringify({ text }),
     });
+    if (!isActiveComposerContext(sessionToken, conversationId)) {
+      return;
+    }
     els.messageInput.value = "";
-    await loadMessages(state.activeConversation.conversation_id, true);
+    await loadMessages(conversationId, true, sessionToken);
+    if (!isActiveComposerContext(sessionToken, conversationId)) {
+      return;
+    }
     await refreshAllLists();
   } catch (err) {
+    if (!isActiveComposerContext(sessionToken, conversationId)) {
+      return;
+    }
     els.composerError.textContent =
       err instanceof Error && err.message ? err.message : "No se pudo enviar el mensaje.";
   }
@@ -670,6 +911,7 @@ async function sendAttachment() {
   if (!activeConversationId) {
     return;
   }
+  const sessionToken = state.sessionToken;
   const selectedFile = els.attachmentInput.files?.[0];
   if (!selectedFile) {
     return;
@@ -698,22 +940,41 @@ async function sendAttachment() {
       method: "POST",
       body: formData,
     });
+    if (!isActiveComposerContext(sessionToken, activeConversationId)) {
+      return;
+    }
     els.attachmentInput.value = "";
-    await loadMessages(activeConversationId, true);
+    await loadMessages(activeConversationId, true, sessionToken);
+    if (!isActiveComposerContext(sessionToken, activeConversationId)) {
+      return;
+    }
     await refreshAllLists();
   } catch (err) {
+    if (!isActiveComposerContext(sessionToken, activeConversationId)) {
+      return;
+    }
     els.composerError.textContent =
       err instanceof Error && err.message
         ? err.message
         : "No se pudo enviar el adjunto por WhatsApp.";
     try {
-      await loadMessages(activeConversationId, true);
+      await loadMessages(activeConversationId, true, sessionToken);
+      if (!isActiveComposerContext(sessionToken, activeConversationId)) {
+        return;
+      }
       await refreshAllLists();
     } catch (reloadErr) {
+      if (!isActiveComposerContext(sessionToken, activeConversationId)) {
+        return;
+      }
       removePendingAttachmentMessage(tempId);
       renderChat(state.activeMessages);
     }
   } finally {
+    if (!isActiveComposerContext(sessionToken, activeConversationId)) {
+      removePendingAttachmentMessage(tempId);
+      return;
+    }
     removePendingAttachmentMessage(tempId);
     renderChat(state.activeMessages);
     els.attachBtn.disabled = false;
@@ -722,9 +983,16 @@ async function sendAttachment() {
 }
 
 async function takeConversation(conversationId) {
+  const sessionToken = state.sessionToken;
   try {
     await apiFetch(`/conversations/${conversationId}/take`, { method: "POST" });
+    if (!isCurrentSession(sessionToken)) {
+      return;
+    }
     await refreshAllLists();
+    if (!isCurrentSession(sessionToken)) {
+      return;
+    }
     await selectConversation(conversationId);
   } catch (err) {
     // ignore
@@ -732,9 +1000,14 @@ async function takeConversation(conversationId) {
 }
 
 async function closeConversation(conversationId) {
+  const sessionToken = state.sessionToken;
   try {
     await apiFetch(`/conversations/${conversationId}/close`, { method: "POST" });
+    if (!isCurrentSession(sessionToken)) {
+      return;
+    }
     state.activeConversation = null;
+    state.activeMessages = [];
     renderDetails();
     await refreshAllLists();
   } catch (err) {
@@ -743,12 +1016,19 @@ async function closeConversation(conversationId) {
 }
 
 async function reassignConversation(conversationId, assigneeId) {
+  const sessionToken = state.sessionToken;
   try {
     await apiFetch(`/conversations/${conversationId}/reassign`, {
       method: "POST",
       body: JSON.stringify({ assignee_user_id: assigneeId }),
     });
+    if (!isCurrentSession(sessionToken)) {
+      return;
+    }
     await refreshAllLists();
+    if (!isCurrentSession(sessionToken)) {
+      return;
+    }
     await selectConversation(conversationId);
   } catch (err) {
     // ignore
@@ -756,40 +1036,61 @@ async function reassignConversation(conversationId, assigneeId) {
 }
 
 async function loadAgents() {
+  const sessionToken = state.sessionToken;
   try {
     const agents = await apiFetch("/auth/users?role=agent");
+    if (sessionToken !== state.sessionToken || state.currentUser?.role !== "admin") {
+      return;
+    }
     state.agentOptions = agents || [];
   } catch (err) {
+    if (sessionToken !== state.sessionToken) {
+      return;
+    }
     state.agentOptions = [];
   }
 }
 
 async function loadTaxonomyState() {
+  const sessionToken = state.sessionToken;
   state.taxonomyEnabled = false;
   state.taxonomyTags = [];
   if (!canManageTaxonomy()) {
-    els.taxonomyBtn.classList.add("hidden");
+    setTaxonomyButtonHidden(true);
     return;
   }
   try {
     const tags = await apiFetch("/conversations/taxonomy/tags?include_archived=true");
+    if (sessionToken !== state.sessionToken || !canManageTaxonomy()) {
+      return;
+    }
     state.taxonomyTags = Array.isArray(tags) ? tags : [];
     state.taxonomyEnabled = true;
-    els.taxonomyBtn.classList.remove("hidden");
+    setTaxonomyButtonHidden(false);
   } catch (err) {
-    els.taxonomyBtn.classList.add("hidden");
+    if (sessionToken !== state.sessionToken) {
+      return;
+    }
+    setTaxonomyButtonHidden(true);
   }
 }
 
 async function refreshTaxonomyTags() {
+  const sessionToken = state.sessionToken;
   if (!canManageTaxonomy()) {
     return;
   }
   try {
     const tags = await apiFetch("/conversations/taxonomy/tags?include_archived=true");
+    if (sessionToken !== state.sessionToken || !canManageTaxonomy()) {
+      return;
+    }
     state.taxonomyTags = Array.isArray(tags) ? tags : [];
     state.taxonomyEnabled = true;
   } catch (err) {
+    if (sessionToken !== state.sessionToken) {
+      return;
+    }
     state.taxonomyTags = [];
     state.taxonomyEnabled = false;
     throw err;
@@ -797,14 +1098,21 @@ async function refreshTaxonomyTags() {
 }
 
 async function setConversationTags(conversationId, tagIds) {
+  const sessionToken = state.sessionToken;
   els.composerError.textContent = "";
   try {
     await apiFetch(`/conversations/${conversationId}/tags`, {
       method: "PUT",
       body: JSON.stringify({ tag_ids: tagIds }),
     });
+    if (!isCurrentSession(sessionToken)) {
+      return;
+    }
     await selectConversation(conversationId);
   } catch (err) {
+    if (!isCurrentSession(sessionToken)) {
+      return;
+    }
     els.composerError.textContent =
       err instanceof Error && err.message ? err.message : "No se pudieron guardar las etiquetas.";
   }
@@ -872,6 +1180,7 @@ function renderTaxonomyModal() {
 }
 
 async function updateTaxonomyTag(tagId, payload) {
+  const sessionToken = state.sessionToken;
   els.taxonomyError.textContent = "";
   try {
     await apiFetch(`/conversations/taxonomy/tags/${tagId}`, {
@@ -879,11 +1188,17 @@ async function updateTaxonomyTag(tagId, payload) {
       body: JSON.stringify(payload),
     });
     await refreshTaxonomyTags();
+    if (!isActiveTaxonomyContext(sessionToken)) {
+      return;
+    }
     renderTaxonomyModal();
     if (state.activeConversation) {
       await selectConversation(state.activeConversation.conversation_id);
     }
   } catch (err) {
+    if (sessionToken !== state.sessionToken) {
+      return;
+    }
     els.taxonomyError.textContent =
       err instanceof Error && err.message ? err.message : "No se pudo actualizar la etiqueta.";
   }
@@ -891,6 +1206,7 @@ async function updateTaxonomyTag(tagId, payload) {
 
 async function createTaxonomyTag(event) {
   event.preventDefault();
+  const sessionToken = state.sessionToken;
   if (!canEditTaxonomy()) {
     return;
   }
@@ -905,25 +1221,41 @@ async function createTaxonomyTag(event) {
       method: "POST",
       body: JSON.stringify({ name }),
     });
+    if (!isActiveTaxonomyContext(sessionToken)) {
+      return;
+    }
     els.taxonomyCreateInput.value = "";
     await refreshTaxonomyTags();
+    if (!isActiveTaxonomyContext(sessionToken)) {
+      return;
+    }
     renderTaxonomyModal();
     if (state.activeConversation) {
       await selectConversation(state.activeConversation.conversation_id);
     }
   } catch (err) {
+    if (sessionToken !== state.sessionToken) {
+      return;
+    }
     els.taxonomyError.textContent =
       err instanceof Error && err.message ? err.message : "No se pudo crear la etiqueta.";
   }
 }
 
 async function openTaxonomyModal() {
+  const sessionToken = state.sessionToken;
   els.taxonomyError.textContent = "";
   try {
     await refreshTaxonomyTags();
+    if (!isActiveTaxonomyContext(sessionToken)) {
+      return;
+    }
     renderTaxonomyModal();
     els.taxonomyModal.classList.remove("hidden");
   } catch (err) {
+    if (sessionToken !== state.sessionToken) {
+      return;
+    }
     els.taxonomyError.textContent =
       err instanceof Error && err.message ? err.message : "Taxonomia no disponible.";
     renderTaxonomyModal();
@@ -939,9 +1271,10 @@ function closeTaxonomyModal() {
 }
 
 function connectWs() {
-  if (state.ws) {
+  if (state.ws || !state.currentUser || !state.wsShouldReconnect) {
     return;
   }
+  clearWsReconnectTimer();
   const protocol = window.location.protocol === "https:" ? "wss" : "ws";
   const wsUrl = `${protocol}://${window.location.host}/realtime/ws`;
   const ws = new WebSocket(wsUrl);
@@ -958,11 +1291,20 @@ function connectWs() {
 
   ws.onclose = () => {
     state.ws = null;
-    setTimeout(connectWs, 2000);
+    if (!state.wsShouldReconnect || !state.currentUser) {
+      clearWsReconnectTimer();
+      return;
+    }
+    clearWsReconnectTimer();
+    state.wsReconnectTimer = window.setTimeout(() => {
+      state.wsReconnectTimer = null;
+      connectWs();
+    }, 2000);
   };
 }
 
 function disconnectWs() {
+  clearWsReconnectTimer();
   if (state.ws) {
     state.ws.close();
     state.ws = null;
@@ -1118,6 +1460,49 @@ function closeAttachmentPreview() {
   els.attachmentModal.classList.add("hidden");
 }
 
+function syncUserMenuActions(isOpen) {
+  const buttons = els.userMenuPanel.querySelectorAll("button");
+  buttons.forEach((button) => {
+    const canFocus = isOpen && !button.classList.contains("hidden");
+    button.tabIndex = canFocus ? 0 : -1;
+  });
+}
+
+function setTaxonomyButtonHidden(isHidden) {
+  els.taxonomyBtn.classList.toggle("hidden", isHidden);
+  syncUserMenuActions(els.userMenu.classList.contains("open"));
+}
+
+function openUserMenu() {
+  els.userMenuPanel.hidden = false;
+  els.userMenuPanel.inert = false;
+  els.userMenuPanel.setAttribute("aria-hidden", "false");
+  syncUserMenuActions(true);
+  els.userMenu.classList.add("open");
+  els.userMenuTrigger.setAttribute("aria-expanded", "true");
+  const firstAction = els.userMenuPanel.querySelector("button:not(.hidden)");
+  if (firstAction) {
+    firstAction.focus();
+  }
+}
+
+function closeUserMenu() {
+  els.userMenu.classList.remove("open");
+  els.userMenuTrigger.setAttribute("aria-expanded", "false");
+  els.userMenuPanel.hidden = true;
+  els.userMenuPanel.inert = true;
+  els.userMenuPanel.setAttribute("aria-hidden", "true");
+  syncUserMenuActions(false);
+}
+
+function toggleUserMenu() {
+  if (els.userMenu.classList.contains("open")) {
+    closeUserMenu();
+  } else {
+    openUserMenu();
+  }
+}
+
 async function extractErrorDetail(response) {
   const contentType = response.headers.get("content-type") || "";
   if (contentType.includes("application/json")) {
@@ -1147,6 +1532,42 @@ function labelForState(stateKey) {
     default:
       return stateKey;
   }
+}
+
+function iconForState(stateKey) {
+  switch (stateKey) {
+    case "CHATBOT":
+      return "✣";
+    case "EN_ESPERA":
+      return "⌛";
+    case "ASIGNADO":
+      return "💬";
+    default:
+      return "•";
+  }
+}
+
+function initialsForConversation(item) {
+  const raw = String(item.contact_name || item.contact_number || "D")
+    .trim()
+    .replace(/\s+/g, " ");
+  if (!raw) {
+    return "D";
+  }
+  const parts = raw.split(" ");
+  if (parts.length === 1) {
+    return raw.slice(0, 1).toUpperCase();
+  }
+  return `${parts[0].slice(0, 1)}${parts[1].slice(0, 1)}`.toUpperCase();
+}
+
+function escapeHtml(value) {
+  return String(value)
+    .replaceAll("&", "&amp;")
+    .replaceAll("<", "&lt;")
+    .replaceAll(">", "&gt;")
+    .replaceAll('"', "&quot;")
+    .replaceAll("'", "&#39;");
 }
 
 function formatRelative(value) {
@@ -1205,10 +1626,25 @@ function formatDateTime(value) {
 
 els.loginForm.addEventListener("submit", handleLogin);
 
+els.userMenuTrigger.addEventListener("click", (event) => {
+  event.preventDefault();
+  toggleUserMenu();
+});
+
+els.userMenuTrigger.addEventListener("keydown", (event) => {
+  if (event.key === "ArrowDown") {
+    event.preventDefault();
+    if (!els.userMenu.classList.contains("open")) {
+      openUserMenu();
+    }
+  }
+});
+
 els.logoutBtn.addEventListener("click", handleLogout);
 
 els.taxonomyBtn.addEventListener("click", () => {
   openTaxonomyModal();
+  closeUserMenu();
 });
 
 els.taxonomyCreateForm.addEventListener("submit", createTaxonomyTag);
@@ -1274,7 +1710,23 @@ document.addEventListener("keydown", (event) => {
   }
   if (event.key === "Escape" && !els.taxonomyModal.classList.contains("hidden")) {
     closeTaxonomyModal();
+    return;
+  }
+  if (event.key === "Escape" && els.userMenu.classList.contains("open")) {
+    closeUserMenu();
+    els.userMenuTrigger.focus();
+    return;
+  }
+  if (event.key === "Tab" && els.userMenu.classList.contains("open") && !els.userMenu.contains(document.activeElement)) {
+    closeUserMenu();
+  }
+});
+
+document.addEventListener("click", (event) => {
+  if (!els.userMenu.contains(event.target)) {
+    closeUserMenu();
   }
 });
 
 bootstrap();
+closeUserMenu();

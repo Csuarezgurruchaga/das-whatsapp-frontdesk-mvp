@@ -1,24 +1,32 @@
 .git
-.git/
-**/.git
-**/.git/
+.gitignore
 .DS_Store
-.Rhistory
-
-# Python virtualenv / caches
-.venv/
+.venv
+.venv*/
 __pycache__/
 *.pyc
+*.pyo
+*.pyd
+.pytest_cache/
+.mypy_cache/
+.coverage
+htmlcov/
 
-# Local runtime artifacts (bind mounts)
+# Local runtime state
 storage/
 .runtime/
 
-# Local env files (Compose reads these from host; they don't need to be in the image)
+# Local env files and secrets
 .env
 .env.*
+!.env.prod.example
 
-# Large local artifacts / docs not needed in the image
+# Local helper artifacts
+scripts/git-http.sh
 PRD.md
 UI-adjunto.png
 das-decision-tree.yaml
+
+# Repo-only docs and tests not needed at runtime
+docs/
+tests/
